@@ -54,6 +54,9 @@ interface IClaudelanceCore {
     event StakeForfeited(uint256 indexed bountyId, address indexed worker, uint96 amount);
     event EarningsWithdrawn(address indexed worker, uint256 amount);
     event ProtocolRevenueAccrued(uint256 amount, uint256 cumulative);
+    event CIRelayerUpdated(address indexed previous, address indexed current);
+    event TreasuryUpdated(address indexed previous, address indexed current);
+    event ERC20Rescued(address indexed token, address indexed to, uint256 amount);
 
     function postBounty(
         uint8 bountyType,
