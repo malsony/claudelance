@@ -8,7 +8,8 @@
 
 | Topic | Decision |
 |-------|----------|
-| Name / GitHub org | `claudelance` |
+| Project name | `claudelance` (npm scope: `@claudelance`) |
+| GitHub host | `github.com/yeheskieltame` (personal account, no org) |
 | LLM (Phase 1) | Claude Code CLI only |
 | Worker wallet | Dual mode: generate locally OR provide existing |
 | Worker GitHub auth | Operator's Personal Access Token |
@@ -39,7 +40,7 @@ claudelance/                                # monorepo (pnpm workspace)
     └── cli/                                # @claudelance/cli     (Day 15)
 ```
 
-Supplementary repos under `github.com/claudelance/`: `bounties-registry` (Phase 1), `content-submissions`, `video-submissions`, etc. (Phase 2).
+Supplementary repos under `github.com/yeheskieltame/`: `bounties-registry` (Phase 1), `content-submissions`, `video-submissions`, etc. (Phase 2).
 
 ## Tech stack pinned versions
 
