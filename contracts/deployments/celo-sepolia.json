@@ -27,11 +27,11 @@
     }
   },
   "liveState": {
-    "capturedAt": 1778706300,
+    "capturedAt": 1778710500,
     "bountyCount": 16,
     "totalBountyVolume": "52500000000000000000",
-    "totalProtocolRevenue": "20000000000000000",
-    "totalBountiesResolved": 1,
+    "totalProtocolRevenue": "87500000000000000",
+    "totalBountiesResolved": 3,
     "uniquePosterCount": 1,
     "uniqueWorkerCount": 2,
     "broadcasts": [
@@ -50,6 +50,10 @@
       {
         "script": "IntegrationE2E.s.sol",
         "result": "Full lifecycle on bounty id 16: post -> 2 claims -> 2 submits -> 2 CI attests -> pickWinner(W1) -> withdraw. Resolved, fee 0.02 to treasury."
+      },
+      {
+        "script": "IntegrationResolveBatch.s.sol",
+        "result": "Resolved seeded bounty id 1 via forfeit path (W2 ciPassed=false, stake forfeited 0.0375 cUSD to treasury) and id 2 via alt-winner path (W2 wins, W1 good-faith refund). totalBountiesResolved 1 -> 3, totalProtocolRevenue 0.02 -> 0.0875 cUSD."
       }
     ]
   }
