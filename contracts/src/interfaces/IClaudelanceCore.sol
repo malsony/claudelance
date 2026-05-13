@@ -56,6 +56,7 @@ interface IClaudelanceCore {
     event ProtocolRevenueAccrued(uint256 amount, uint256 cumulative);
     event CIRelayerUpdated(address indexed previous, address indexed current);
     event TreasuryUpdated(address indexed previous, address indexed current);
+    event ERC20Rescued(address indexed token, address indexed to, uint256 amount);
 
     function postBounty(
         uint8 bountyType,

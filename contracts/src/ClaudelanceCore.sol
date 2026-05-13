@@ -61,6 +61,7 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
     error NotRelayer();
     error NothingToWithdraw();
     error GracePeriodActive();
+    error CannotRescueCUSD();
 
     modifier onlyRelayer() {
         if (msg.sender != ciRelayer) revert NotRelayer();
@@ -345,5 +346,18 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    /// @notice Rescue ERC20 tokens accidentally sent to the contract. cUSD is excluded
+    ///         because it is held legitimately on behalf of bounties, stakes, and
+    ///         pending earnings withdrawals.
+    /// @param  token  ERC20 token to rescue. Must not equal `cUSD`.
+    /// @param  to     Recipient address. Cannot be the zero address.
+    /// @param  amount Token amount to transfer.
+    function rescueERC20(IERC20 token, address to, uint256 amount) external onlyOwner {
+        if (address(token) == address(cUSD)) revert CannotRescueCUSD();
+        if (to == address(0)) revert InvalidAddress();
+        token.safeTransfer(to, amount);
+        emit ERC20Rescued(address(token), to, amount);
     }
 }
