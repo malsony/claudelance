@@ -552,4 +552,39 @@ contract ClaudelanceCoreTest is Test {
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
     }
+
+    function test_Constructor_EmitsGenesisEvents() public {
+        vm.expectEmit(true, true, false, false);
+        emit IClaudelanceCore.TreasuryUpdated(address(0), treasury);
+        vm.expectEmit(true, true, false, false);
+        emit IClaudelanceCore.CIRelayerUpdated(address(0), relayer);
+        new ClaudelanceCore(IERC20(address(cusd)), treasury, relayer, owner);
+    }
+
+    function test_SetTreasury_EmitsAndStores() public {
+        address newT = makeAddr("newT");
+        vm.expectEmit(true, true, false, false);
+        emit IClaudelanceCore.TreasuryUpdated(treasury, newT);
+        vm.prank(owner);
+        core.setTreasury(newT);
+        assertEq(core.treasury(), newT);
+    }
+
+    function test_SetCIRelayer_EmitsAndStores() public {
+        address newR = makeAddr("newR");
+        vm.expectEmit(true, true, false, false);
+        emit IClaudelanceCore.CIRelayerUpdated(relayer, newR);
+        vm.prank(owner);
+        core.setCIRelayer(newR);
+        assertEq(core.ciRelayer(), newR);
+    }
+
+    function test_AdminSetters_RejectZeroAddress() public {
+        vm.startPrank(owner);
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        core.setTreasury(address(0));
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        core.setCIRelayer(address(0));
+        vm.stopPrank();
+    }
 }
