@@ -23,6 +23,8 @@ See `Blueprint.md` for full specification and `CLAUDE.md` for working convention
 ## Quickstart
 
 ```bash
+git clone https://github.com/yeheskieltame/claudelance.git
+cd claudelance
 pnpm install
 cp .env.example .env
 cd contracts && forge install && forge test
