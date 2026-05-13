@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { ClaudelanceCore } from "../src/ClaudelanceCore.sol";
 import { IClaudelanceCore } from "../src/interfaces/IClaudelanceCore.sol";
-import { MockCUSD } from "./helpers/MockCUSD.sol";
+import { MockCUSD } from "../src/mocks/MockCUSD.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
