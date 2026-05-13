@@ -568,6 +568,121 @@ contract SepoliaLiveTest is Test {
         core.unpause();
     }
 
+    // -----------------------------------------------------------------------
+    //                       Stats + view-fn correctness
+    // -----------------------------------------------------------------------
+
+    function test_Live_MultiPoster_UniquePosterCountIncrements() public {
+        address poster2 = makeAddr("fork-poster-2");
+        cusd.mint(poster2, 100e18);
+        vm.prank(poster2);
+        cusd.approve(coreAddr, type(uint256).max);
+
+        uint256 startUniqueP = core.uniquePosterCount();
+
+        _post();
+        // poster's first post on this fork: count goes up by 1 (or 0 if poster
+        // already posted live, which doesn't apply because each fork test
+        // forks fresh state).
+        uint256 afterFirst = core.uniquePosterCount();
+
+        vm.prank(poster2);
+        core.postBounty(
+            0, "github.com/x/y", "github.com/x/y/issues/p2", bytes32("p2"),
+            AMOUNT, SLOTS, STAKE, DEADLINE, true
+        );
+        uint256 afterSecond = core.uniquePosterCount();
+
+        assertGe(afterFirst, startUniqueP, "poster posted (live state may already include poster)");
+        assertEq(afterSecond - afterFirst, 1, "poster2 is a brand-new poster");
+    }
+
+    function test_Live_BountyType_CounterPerType() public {
+        uint256 typeFiveBefore = core.bountyCountByType(5);
+
+        vm.prank(poster);
+        core.postBounty(
+            5, "github.com/x/y", "github.com/x/y/issues/type5", bytes32("t5"),
+            AMOUNT, 1, 0, DEADLINE, false
+        );
+        vm.prank(poster);
+        core.postBounty(
+            5, "github.com/x/y", "github.com/x/y/issues/type5b", bytes32("t5b"),
+            AMOUNT, 1, 0, DEADLINE, false
+        );
+
+        assertEq(core.bountyCountByType(5) - typeFiveBefore, 2);
+        assertEq(core.bountyCountByType(99), 0);
+    }
+
+    function test_Live_GetEligibleSubmissions_FiltersCorrectly() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _claim(id, w2);
+        address w3 = makeAddr("fork-w3");
+        cusd.mint(w3, 10e18);
+        vm.prank(w3);
+        cusd.approve(coreAddr, type(uint256).max);
+        _claim(id, w3);
+
+        // Only w1 submits and passes CI; w2 submits but fails CI; w3 never submits.
+        _submit(id, w1, "github.com/.../pull/E1");
+        _submit(id, w2, "github.com/.../pull/E2");
+        _attest(id, w1, true);
+        _attest(id, w2, false);
+
+        address[] memory eligible = core.getEligibleSubmissions(id);
+        assertEq(eligible.length, 1, "only w1 is CI-passing");
+        assertEq(eligible[0], w1);
+
+        // Now relayer changes mind and approves w2.
+        _attest(id, w2, true);
+        address[] memory eligibleAfter = core.getEligibleSubmissions(id);
+        assertEq(eligibleAfter.length, 2);
+    }
+
+    function test_Live_GetEligibleSubmissions_NoCIRequired_IncludesAllSubmitted() public {
+        vm.prank(poster);
+        uint256 id = core.postBounty(
+            0,
+            "github.com/yeheskieltame/claudelance-sandbox",
+            "github.com/yeheskieltame/claudelance-sandbox/issues/no-ci-list",
+            keccak256("no-ci-list"),
+            AMOUNT,
+            3,
+            0,
+            DEADLINE,
+            false
+        );
+        _claim(id, w1);
+        _claim(id, w2);
+        _submit(id, w1, "github.com/.../pull/N1");
+        _submit(id, w2, "github.com/.../pull/N2");
+
+        // No attestCI calls; ciRequired = false ⇒ both should be eligible.
+        address[] memory eligible = core.getEligibleSubmissions(id);
+        assertEq(eligible.length, 2);
+    }
+
+    function test_Live_GetClaimers_ReturnsExactOrder() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _claim(id, w2);
+
+        address[] memory claimers = core.getClaimers(id);
+        assertEq(claimers.length, 2);
+        assertEq(claimers[0], w1);
+        assertEq(claimers[1], w2);
+    }
+
+    function test_Live_HasClaimed_PublicMapping() public {
+        uint256 id = _post();
+        assertFalse(core.hasClaimed(id, w1));
+        _claim(id, w1);
+        assertTrue(core.hasClaimed(id, w1));
+        assertFalse(core.hasClaimed(id, w2));
+    }
+
     function test_Live_RescueERC20_FullFlow() public {
         // Deploy a foreign ERC20 and mint some to the deployed core.
         MockCUSD foreign = new MockCUSD();
