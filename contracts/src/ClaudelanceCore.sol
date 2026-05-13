@@ -74,6 +74,9 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
         cUSD = _cUSD;
         treasury = _treasury;
         ciRelayer = _ciRelayer;
+
+        emit TreasuryUpdated(address(0), _treasury);
+        emit CIRelayerUpdated(address(0), _ciRelayer);
     }
 
     function postBounty(
@@ -324,12 +327,16 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
 
     function setCIRelayer(address newRelayer) external onlyOwner {
         if (newRelayer == address(0)) revert InvalidAddress();
+        address previous = ciRelayer;
         ciRelayer = newRelayer;
+        emit CIRelayerUpdated(previous, newRelayer);
     }
 
     function setTreasury(address newTreasury) external onlyOwner {
         if (newTreasury == address(0)) revert InvalidAddress();
+        address previous = treasury;
         treasury = newTreasury;
+        emit TreasuryUpdated(previous, newTreasury);
     }
 
     function pause() external onlyOwner {
