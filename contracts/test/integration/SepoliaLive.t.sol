@@ -310,4 +310,157 @@ contract SepoliaLiveTest is Test {
         vm.prank(w2);
         core.submitPR(id, "github.com/whatever/pull/2", bytes32(uint256(2)), "");
     }
+
+    function test_Live_AttestCI_RejectsBadCallerAndState() public {
+        uint256 id = _post();
+
+        // Non-relayer reverts.
+        vm.expectRevert(ClaudelanceCore.NotRelayer.selector);
+        vm.prank(stranger);
+        core.attestCI(id, w1, true);
+
+        // Live relayer attesting a non-claimer reverts.
+        vm.expectRevert(ClaudelanceCore.NotClaimer.selector);
+        vm.prank(liveRelayer);
+        core.attestCI(id, w1, true);
+
+        _claim(id, w1);
+
+        // Relayer attesting before submission reverts.
+        vm.expectRevert(ClaudelanceCore.NoSubmission.selector);
+        vm.prank(liveRelayer);
+        core.attestCI(id, w1, true);
+    }
+
+    function test_Live_AttestCI_AllowsToggleByRelayer() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/T1");
+
+        _attest(id, w1, true);
+        assertTrue(core.getSubmission(id, w1).ciPassed);
+
+        _attest(id, w1, false);
+        assertFalse(core.getSubmission(id, w1).ciPassed);
+
+        _attest(id, w1, true);
+        assertTrue(core.getSubmission(id, w1).ciPassed);
+    }
+
+    function test_Live_PickWinner_RevertPaths() public {
+        uint256 id = _post();
+        _claim(id, w1);
+
+        // Non-poster reverts.
+        vm.expectRevert(ClaudelanceCore.NotPoster.selector);
+        vm.prank(stranger);
+        core.pickWinner(id, w1);
+
+        // Winner not a claimer.
+        vm.expectRevert(ClaudelanceCore.WinnerInvalid.selector);
+        vm.prank(poster);
+        core.pickWinner(id, stranger);
+
+        // Winner is a claimer but has no submission.
+        vm.expectRevert(ClaudelanceCore.WinnerInvalid.selector);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/PW1");
+
+        // ciRequired = true but no attestation yet.
+        vm.expectRevert(ClaudelanceCore.WinnerInvalid.selector);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        _attest(id, w1, true);
+
+        // Happy path closes the bounty.
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        // Already resolved.
+        vm.expectRevert(ClaudelanceCore.BountyNotOpen.selector);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+    }
+
+    function test_Live_PickWinner_NoCIRequired_WorksWithoutAttestation() public {
+        vm.prank(poster);
+        uint256 id = core.postBounty(
+            0,
+            "github.com/yeheskieltame/claudelance-sandbox",
+            "github.com/yeheskieltame/claudelance-sandbox/issues/no-ci",
+            keccak256("no-ci"),
+            AMOUNT,
+            1,
+            0,
+            DEADLINE,
+            false
+        );
+
+        _claim(id, w1);
+        _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/NOCI");
+
+        // No attestCI call — should still resolve because ciRequired = false.
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        IClaudelanceCore.Bounty memory b = core.getBounty(id);
+        assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
+        assertEq(b.winner, w1);
+    }
+
+    function test_Live_CancelExpired_RevertPaths() public {
+        uint256 id = _post();
+
+        // Pre-deadline cancel reverts even from poster.
+        vm.expectRevert(ClaudelanceCore.BountyNotExpired.selector);
+        vm.prank(poster);
+        core.cancelExpired(id);
+
+        // Resolve the bounty fully first.
+        _claim(id, w1);
+        _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/CE1");
+        _attest(id, w1, true);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        // Cancel-after-resolve reverts.
+        vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
+        vm.expectRevert(ClaudelanceCore.BountyNotOpen.selector);
+        vm.prank(stranger);
+        core.cancelExpired(id);
+    }
+
+    function test_Live_WithdrawEarnings_RevertsOnEmptyBalance() public {
+        // Caller has never had earnings credited.
+        address freshActor = makeAddr("fork-fresh-earner");
+        vm.expectRevert(ClaudelanceCore.NothingToWithdraw.selector);
+        vm.prank(freshActor);
+        core.withdrawEarnings();
+    }
+
+    function test_Live_WithdrawEarnings_ClearsBalanceAndPays() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/W1");
+        _attest(id, w1, true);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        uint256 owed = core.earnings(w1);
+        assertGt(owed, 0, "winner should have earnings to withdraw");
+
+        uint256 before = cusd.balanceOf(w1);
+        vm.prank(w1);
+        core.withdrawEarnings();
+
+        assertEq(core.earnings(w1), 0, "earnings cleared");
+        assertEq(cusd.balanceOf(w1), before + owed, "exact payout transferred");
+
+        vm.expectRevert(ClaudelanceCore.NothingToWithdraw.selector);
+        vm.prank(w1);
+        core.withdrawEarnings();
+    }
 }
