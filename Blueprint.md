@@ -396,8 +396,9 @@ celo-sepolia = "https://forno.celo-sepolia.celo-testnet.org/"
 celo = "https://forno.celo.org"
 
 [etherscan]
-celo-sepolia = { key = "${CELOSCAN_API_KEY}", url = "https://api-sepolia.celoscan.io/api" }
-celo = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }
+# Etherscan API V2 — one ETHERSCAN_API_KEY covers Celo + 60+ EVM chains.
+celo-sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=11142220" }
+celo = { key = "${ETHERSCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=42220" }
 ```
 
 ### `remappings.txt`
@@ -992,7 +993,7 @@ Critical pre-coding tasks:
 - [ ] Connect Farcaster, GitHub, npm to Talent Passport
 - [ ] Buy ~$5 CELO for KarmaGAP fees + ~$30 cUSD for seed bounties
 - [ ] Install Celo MCP Server in Claude Code config
-- [ ] Setup `.env` (deployer key, CELOSCAN_API_KEY, NPM_TOKEN, RPC URLs)
+- [ ] Setup `.env` (deployer key, ETHERSCAN_API_KEY, NPM_TOKEN, RPC URLs)
 - [ ] Pick domain (claudelance.xyz or Vercel subdomain)
 
 ### Phase 1: MVP Build (Day 1-6)

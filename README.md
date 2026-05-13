@@ -60,10 +60,15 @@ forge script script/DeployMockCUSD.s.sol \
 forge script script/Deploy.s.sol \
   --rpc-url celo_sepolia --broadcast --private-key $DEPLOYER_PRIVATE_KEY
 
-# 3. (Once CELOSCAN_API_KEY is set) post-hoc verify:
+# 3. (Once ETHERSCAN_API_KEY is set) post-hoc verify via Etherscan API V2:
 forge verify-contract --chain celo_sepolia <CORE_ADDRESS> \
-  src/ClaudelanceCore.sol:ClaudelanceCore
+  src/ClaudelanceCore.sol:ClaudelanceCore \
+  --etherscan-api-key $ETHERSCAN_API_KEY
 ```
+
+The unified Etherscan V2 key works for Celo plus 60+ other EVM chains
+— grab one at <https://etherscan.io/myapikey> and reuse it for the
+mainnet deploy.
 
 For mainnet, skip step 1 and point `CUSD_ADDRESS` at `0x765DE816845861e75A25fCA122bb6898B8B1282a`.
 
