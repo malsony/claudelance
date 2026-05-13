@@ -25,5 +25,32 @@
       "blockscout": "https://celo-sepolia.blockscout.com/address/0x207D662337694796E76a4d5577DC72C93Cd92822",
       "celoscan": "https://sepolia.celoscan.io/address/0x207d662337694796e76a4d5577dc72c93cd92822#code"
     }
+  },
+  "liveState": {
+    "capturedAt": 1778706300,
+    "bountyCount": 16,
+    "totalBountyVolume": "52500000000000000000",
+    "totalProtocolRevenue": "20000000000000000",
+    "totalBountiesResolved": 1,
+    "uniquePosterCount": 1,
+    "uniqueWorkerCount": 2,
+    "broadcasts": [
+      {
+        "script": "DeployMockCUSD.s.sol",
+        "result": "MockCUSD at 0x207D66...2822, deployer seeded 10_000 mock cUSD"
+      },
+      {
+        "script": "Deploy.s.sol",
+        "result": "ClaudelanceCore at 0x8223cB...191D"
+      },
+      {
+        "script": "SeedBounties.s.sol",
+        "result": "15 bounties posted (ids 1-15, mixed tier, total 51.5 cUSD)"
+      },
+      {
+        "script": "IntegrationE2E.s.sol",
+        "result": "Full lifecycle on bounty id 16: post -> 2 claims -> 2 submits -> 2 CI attests -> pickWinner(W1) -> withdraw. Resolved, fee 0.02 to treasury."
+      }
+    ]
   }
 }
