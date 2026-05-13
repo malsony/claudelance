@@ -24,6 +24,9 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
     uint64 public constant MIN_DEADLINE = 1 days;
     uint64 public constant MAX_DEADLINE = 14 days;
     uint96 public constant MIN_BOUNTY = 0.5e18;
+    /// @notice Delay after `deadline` during which only the poster may cancel the bounty.
+    ///         Protects workers with a passing submission from a third-party cancel-race.
+    uint64 public constant RESOLUTION_GRACE_PERIOD = 3 days;
 
     uint256 public totalBountyVolume;
     uint256 public totalProtocolRevenue;
@@ -52,10 +55,12 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
     error AlreadyClaimed();
     error NotClaimer();
     error NoSubmission();
+    error AlreadySubmitted();
     error WinnerInvalid();
     error NotPoster();
     error NotRelayer();
     error NothingToWithdraw();
+    error GracePeriodActive();
 
     modifier onlyRelayer() {
         if (msg.sender != ciRelayer) revert NotRelayer();
@@ -152,6 +157,11 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
         if (bytes(prUrl).length == 0) revert NoSubmission();
 
         Submission storage s = _submissions[bountyId][msg.sender];
+        // One-shot: a worker cannot overwrite a prior submission. Otherwise a worker could
+        // submit good code, get the relayer's `ciPassed=true` attestation, then quietly
+        // swap to malicious code and still win on the stale attestation.
+        if (s.submittedAt != 0) revert AlreadySubmitted();
+
         s.prUrl = prUrl;
         s.commitHash = commitHash;
         s.metadata = metadata;
@@ -206,6 +216,11 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable, Pausable
         Bounty storage b = _bounties[bountyId];
         if (b.status != BountyStatus.Open) revert BountyNotOpen();
         if (block.timestamp < b.deadline) revert BountyNotExpired();
+        // During the grace window the poster keeps the exclusive right to resolve or
+        // cancel; a passing-CI worker cannot be cancelled out by a griefer.
+        if (block.timestamp < b.deadline + RESOLUTION_GRACE_PERIOD && msg.sender != b.poster) {
+            revert GracePeriodActive();
+        }
 
         b.status = BountyStatus.Cancelled;
 

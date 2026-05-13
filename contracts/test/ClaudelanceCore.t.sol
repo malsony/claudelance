@@ -335,7 +335,7 @@ contract ClaudelanceCoreTest is Test {
         vm.expectRevert(ClaudelanceCore.BountyNotExpired.selector);
         core.cancelExpired(id);
 
-        vm.warp(block.timestamp + DEADLINE + 1);
+        vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
         uint256 posterBefore = cusd.balanceOf(poster);
         uint256 treasuryBefore = cusd.balanceOf(treasury);
 
@@ -448,5 +448,108 @@ contract ClaudelanceCoreTest is Test {
         assertEq(core.bountyCountByType(7), 1);
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(b.bountyType, 7);
+    }
+
+    function test_SubmitPR_IsOneShot() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+
+        vm.expectRevert(ClaudelanceCore.AlreadySubmitted.selector);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/employer/repo/pull/99", bytes32(uint256(0xdef)), "{}");
+
+        IClaudelanceCore.Submission memory s = core.getSubmission(id, w1);
+        assertEq(s.prUrl, "github.com/employer/repo/pull/2");
+        assertEq(s.commitHash, bytes32(uint256(0xabc)));
+    }
+
+    function test_SubmitPR_OneShot_PreventsCIBypass() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.expectRevert(ClaudelanceCore.AlreadySubmitted.selector);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/employer/repo/pull/666", bytes32(uint256(0xbad)), "malicious");
+
+        IClaudelanceCore.Submission memory s = core.getSubmission(id, w1);
+        assertTrue(s.ciPassed);
+        assertEq(s.prUrl, "github.com/employer/repo/pull/2");
+    }
+
+    function test_CancelExpired_GracePeriod_RejectsThirdParty() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.warp(block.timestamp + DEADLINE + 1);
+
+        vm.expectRevert(ClaudelanceCore.GracePeriodActive.selector);
+        vm.prank(stranger);
+        core.cancelExpired(id);
+
+        vm.expectRevert(ClaudelanceCore.GracePeriodActive.selector);
+        vm.prank(w2);
+        core.cancelExpired(id);
+
+        IClaudelanceCore.Bounty memory b = core.getBounty(id);
+        assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Open));
+    }
+
+    function test_CancelExpired_GracePeriod_PosterCanCancelImmediately() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.warp(block.timestamp + DEADLINE + 1);
+
+        uint256 posterBefore = cusd.balanceOf(poster);
+        vm.prank(poster);
+        core.cancelExpired(id);
+
+        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
+        IClaudelanceCore.Bounty memory b = core.getBounty(id);
+        assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Cancelled));
+    }
+
+    function test_CancelExpired_AfterGrace_AnyoneCanCancel() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
+
+        uint256 posterBefore = cusd.balanceOf(poster);
+        vm.prank(stranger);
+        core.cancelExpired(id);
+
+        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
+        assertEq(core.earnings(w1), STAKE);
+    }
+
+    function test_CancelExpired_GraceProtectsWinnerFromGriefRace() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.warp(block.timestamp + DEADLINE + 1);
+
+        vm.expectRevert(ClaudelanceCore.GracePeriodActive.selector);
+        vm.prank(stranger);
+        core.cancelExpired(id);
+
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
+        assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE);
+        IClaudelanceCore.Bounty memory b = core.getBounty(id);
+        assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
     }
 }
