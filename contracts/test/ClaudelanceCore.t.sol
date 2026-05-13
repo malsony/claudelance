@@ -449,4 +449,33 @@ contract ClaudelanceCoreTest is Test {
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(b.bountyType, 7);
     }
+
+    function test_SubmitPR_IsOneShot() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+
+        vm.expectRevert(ClaudelanceCore.AlreadySubmitted.selector);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/employer/repo/pull/99", bytes32(uint256(0xdef)), "{}");
+
+        IClaudelanceCore.Submission memory s = core.getSubmission(id, w1);
+        assertEq(s.prUrl, "github.com/employer/repo/pull/2");
+        assertEq(s.commitHash, bytes32(uint256(0xabc)));
+    }
+
+    function test_SubmitPR_OneShot_PreventsCIBypass() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+
+        vm.expectRevert(ClaudelanceCore.AlreadySubmitted.selector);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/employer/repo/pull/666", bytes32(uint256(0xbad)), "malicious");
+
+        IClaudelanceCore.Submission memory s = core.getSubmission(id, w1);
+        assertTrue(s.ciPassed);
+        assertEq(s.prUrl, "github.com/employer/repo/pull/2");
+    }
 }
