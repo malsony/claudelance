@@ -51,23 +51,23 @@ contract SeedBounties is Script {
     }
 
     function _seeds() internal pure returns (Seed[15] memory s) {
-        s[0] = Seed(0.75e18, 3, 2 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/1");
-        s[1] = Seed(0.75e18, 3, 2 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/2");
-        s[2] = Seed(1e18, 3, 2 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/3");
-        s[3] = Seed(1e18, 3, 2 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/4");
-        s[4] = Seed(1e18, 3, 2 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/5");
+        s[0] = Seed(0.75e18, 3, 2 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/1");
+        s[1] = Seed(0.75e18, 3, 2 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/2");
+        s[2] = Seed(1e18, 3, 2 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/3");
+        s[3] = Seed(1e18, 3, 2 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/4");
+        s[4] = Seed(1e18, 3, 2 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/5");
 
-        s[5] = Seed(2e18, 4, 3 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/6");
-        s[6] = Seed(2e18, 4, 3 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/7");
-        s[7] = Seed(2.5e18, 5, 3 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/8");
-        s[8] = Seed(2.5e18, 5, 3 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/9");
-        s[9] = Seed(3e18, 5, 3 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/10");
+        s[5] = Seed(2e18, 4, 3 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/6");
+        s[6] = Seed(2e18, 4, 3 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/7");
+        s[7] = Seed(2.5e18, 5, 3 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/8");
+        s[8] = Seed(2.5e18, 5, 3 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/9");
+        s[9] = Seed(3e18, 5, 3 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/10");
 
-        s[10] = Seed(4e18, 5, 5 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/11");
-        s[11] = Seed(5e18, 5, 5 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/12");
-        s[12] = Seed(6e18, 5, 5 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/13");
-        s[13] = Seed(8e18, 5, 5 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/14");
+        s[10] = Seed(4e18, 5, 5 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/11");
+        s[11] = Seed(5e18, 5, 5 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/12");
+        s[12] = Seed(6e18, 5, 5 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/13");
+        s[13] = Seed(8e18, 5, 5 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/14");
 
-        s[14] = Seed(12e18, 5, 7 days, "github.com/claudelance/sandbox", "github.com/claudelance/sandbox/issues/15");
+        s[14] = Seed(12e18, 5, 7 days, "github.com/yeheskieltame/claudelance-sandbox", "github.com/yeheskieltame/claudelance-sandbox/issues/15");
     }
 }
