@@ -1,0 +1,16 @@
+{
+  "chainId": 11142220,
+  "chainName": "celo-sepolia",
+  "core": "0x8223cB87CfAAB9c1a5e524545C3097df1517191D",
+  "cUSD": "0x207D662337694796E76a4d5577DC72C93Cd92822",
+  "cUSDKind": "MockCUSD (testnet stand-in; canonical cUSD does not exist on Celo Sepolia)",
+  "treasury": "0x987e2ed458ddAF6f900362F94558378056dCc226",
+  "ciRelayer": "0x987e2ed458ddAF6f900362F94558378056dCc226",
+  "owner": "0x987e2ed458ddAF6f900362F94558378056dCc226",
+  "deployedAt": 1778702529,
+  "deployer": "0x987e2ed458ddAF6f900362F94558378056dCc226",
+  "explorer": {
+    "core": "https://celo-sepolia.blockscout.com/address/0x8223cB87CfAAB9c1a5e524545C3097df1517191D",
+    "cUSD": "https://celo-sepolia.blockscout.com/address/0x207D662337694796E76a4d5577DC72C93Cd92822"
+  }
+}
