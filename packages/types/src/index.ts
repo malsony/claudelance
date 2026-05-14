@@ -1,3 +1,4 @@
 // Public surface for @claudelance/types.
-// Concrete exports land in subsequent PRs (types, ABI, deployments).
-export {};
+export { BountyStatus, type Bounty } from './bounty.js';
+export type { Submission } from './submission.js';
+export type { PendingAddress } from './pending.js';
