@@ -8,7 +8,7 @@
 
 | Topic | Decision |
 |-------|----------|
-| Project name | `claudelance` (npm scope: `@claudelance`) |
+| Project name | `claudelance` (npm names: `@yeheskieltame/claudelance-*`, matches GitHub owner for Packages registry compat) |
 | GitHub host | `github.com/yeheskieltame` (personal account, no org) |
 | LLM (Phase 1) | Claude Code CLI only |
 | Worker wallet | Dual mode: generate locally OR provide existing |
@@ -36,12 +36,12 @@
 | `contracts/` | live (mainnet + Sepolia) | Foundry, Solidity 0.8.24, OZ v5 |
 | `apps/web/` | in progress | Next.js 15 MiniPay app (landing + stats live) |
 | `apps/relayer/` | planned (Day 5) | Hono + SQLite indexer + CI verifier |
-| `packages/worker/` | planned (Day 4) | `@claudelance/worker` Claude Code CLI |
-| `packages/types/` | published-ready | `@claudelance/types` shared ABI + types |
-| `packages/sdk/` | published-ready | `@claudelance/sdk` agent client |
-| `packages/contracts/` | planned (Day 9) | `@claudelance/contracts` ABI artifacts |
+| `packages/worker/` | planned (Day 4) | `@yeheskieltame/claudelance-worker` Claude Code CLI |
+| `packages/types/` | published-ready | `@yeheskieltame/claudelance-types` shared ABI + types |
+| `packages/sdk/` | published-ready | `@yeheskieltame/claudelance-sdk` agent client |
+| `packages/contracts/` | planned (Day 9) | `@yeheskieltame/claudelance-contracts` ABI artifacts |
 | `packages/react/` | planned (Day 13) | `claudelance-react` hooks |
-| `packages/cli/` | planned (Day 15) | `@claudelance/cli` |
+| `packages/cli/` | planned (Day 15) | `@yeheskieltame/claudelance-cli` (binaries `claudelance` and `cln`) |
 
 Supplementary repos under `github.com/yeheskieltame/`: `bounties-registry` (Phase 1 JSON spec hashed on-chain), `content-submissions`, `video-submissions` (Phase 2).
 
@@ -135,8 +135,8 @@ Owner-only mainnet actions must go through the Safe at <https://app.safe.global/
 ## Critical timeline
 
 - Day 0 (2026-05-14): admin setup + `ClaudelanceCore.sol` + 67 unit / 4 invariant / 28 fork tests + **Sepolia + mainnet deploy** (both verified on Celoscan)
-- Day 4: publish `@claudelance/worker`
-- Day 6: Vercel deploy + publish `@claudelance/types`
+- Day 4: publish `@yeheskieltame/claudelance-worker`
+- Day 6: Vercel deploy + publish `@yeheskieltame/claudelance-types`
 - Day 7 (2026-05-21): submission deadline — KarmaGAP + 15 seed bounties + 4-min demo video + pitch deck + Talent Protocol submit
 - Day 8-15: sustained activity, onboard workers, publish remaining 4 npm packages
 - Day 29 (2026-05-29): hackathon ends
