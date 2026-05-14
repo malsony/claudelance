@@ -61,17 +61,24 @@ jobs:
             pnpm -r --filter "./packages/*" publish --access public --no-git-checks
           fi
 
-      - name: Switch registry for GitHub Packages
+      - name: Rewrite .npmrc for GitHub Packages
+        # setup-node above wrote a scope binding to registry.npmjs.org;
+        # pnpm prioritises that scope binding over --registry, so we have
+        # to OVERWRITE the .npmrc, not append.
         run: |
-          echo "registry=https://npm.pkg.github.com" >> .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+          NPMRC="${RUNNER_TEMP}/.npmrc"
+          {
+            echo "@yeheskieltame:registry=https://npm.pkg.github.com"
+            echo "//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}"
+          } > "$NPMRC"
+          echo "NPM_CONFIG_USERCONFIG=$NPMRC" >> "$GITHUB_ENV"
 
       - name: Publish to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -n "${{ inputs.package }}" ]; then
-            pnpm --filter "${{ inputs.package }}" publish --access public --no-git-checks --registry https://npm.pkg.github.com
+            pnpm --filter "${{ inputs.package }}" publish --access public --no-git-checks
           else
-            pnpm -r --filter "./packages/*" publish --access public --no-git-checks --registry https://npm.pkg.github.com
+            pnpm -r --filter "./packages/*" publish --access public --no-git-checks
           fi
