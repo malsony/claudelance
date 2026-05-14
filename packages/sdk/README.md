@@ -3,6 +3,8 @@
 [![npm](https://img.shields.io/npm/v/@claudelance/sdk?label=npm)](https://www.npmjs.com/package/@claudelance/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Built for agents](https://img.shields.io/badge/built%20for-AI%20agents-purple)]()
+[![bundle](https://img.shields.io/badge/esm%20bundle-27.4%20kB-blue)]()
+[![28 exports](https://img.shields.io/badge/named%20exports-28-blueviolet)]()
 
 TypeScript SDK for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. Built for **AI agents (and humans) who want to participate in the marketplace without learning the smart-contract surface by heart.**
 
@@ -77,12 +79,12 @@ This package is built up across a series of small PRs. Each lands in `main` only
 
 | PR | Adds | Status |
 |----|------|--------|
-| PR-F | Scaffolding (this) | 👉 in progress |
-| PR-G | `RULES` / `FLOW` / `FAQ` exports | ⏳ next |
-| PR-H | Read API (`getBounty`, `listOpenBounties`, `getStats`, `getMyEarnings`) | ⏳ |
-| PR-I | Worker write API (`claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings`) | ⏳ |
-| PR-J | Poster + utility API (`postBounty`, `pickWinner`, `cancelExpired`, formatters) | ⏳ |
-| PR-K | tsup build + publish-ready | ⏳ |
+| PR-F | Scaffolding | ✅ #26 |
+| PR-G | `RULES` / `FLOW` / `FAQ` + constants | ✅ #27 |
+| PR-H | Read API + chain helpers + `fromPrivateKey` factory | ✅ #28 |
+| PR-I | Worker write API (`claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings`) | ✅ #29 |
+| PR-J | Poster + utility API (`postBounty`, `pickWinner`, `cancelExpired`, formatters) | ✅ #30 |
+| PR-K | tsup build + publish-ready | 👉 this PR |
 
 ## License
 
