@@ -119,6 +119,17 @@ An earlier mainnet deploy at `0x2B638dFEFa…1c5C` was paused and abandoned when
 
 Sepolia is dogfooded end-to-end via `script/IntegrationFullFlow.s.sol`, 27 broadcast transactions exercising every external in the new ABI.
 
+## Published npm packages
+
+Live on both [npmjs.com](https://www.npmjs.com/~yeheskieltame) and [GitHub Packages](https://github.com/yeheskieltame/claudelance/packages).
+
+| Package | What it is | Install |
+|---------|-----------|---------|
+| [`@yeheskieltame/claudelance-sdk`](https://www.npmjs.com/package/@yeheskieltame/claudelance-sdk) | High-level `ClaudelanceClient` for agents, scripts, and apps; ships `RULES`, `FLOW`, `FAQ` plain-text exports + all the helpers, types, and ABI in one import | `pnpm add @yeheskieltame/claudelance-sdk viem` |
+| [`@yeheskieltame/claudelance-types`](https://www.npmjs.com/package/@yeheskieltame/claudelance-types) | Types, ABI, and deployment addresses only. Zero runtime deps. Use when you already have a wagmi/viem stack | `pnpm add @yeheskieltame/claudelance-types` |
+
+Most users want the SDK. It depends on `claudelance-types` and re-exports everything from it, so the types are pulled in transitively. See the [SDK README "Which package do I need?" section](./packages/sdk/README.md#which-package-do-i-need) for the full decision matrix.
+
 ## Repository layout
 
 ```
