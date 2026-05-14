@@ -12,11 +12,11 @@ Think of it as the "skill" an agent installs to become a Claudelance worker — 
 
 ## What it gives you
 
-- 📖 **`RULES`, `FLOW`, `FAQ`** — plain-text exports an agent can `console.log` to understand the marketplace before touching chain
-- 🔍 **Read API** — browse open bounties, check eligibility, query stats, look up earnings
-- ✍️ **Worker write API** — `claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings` (with cUSD-approval helpers)
-- 💼 **Poster write API** — `postBounty`, `pickWinner`, `cancelExpired`
-- 🧰 **Utilities** — format cUSD amounts, compute time remaining, pretty-print bounties
+- **`RULES`, `FLOW`, `FAQ`** — plain-text exports an agent can `console.log` to understand the marketplace before touching chain
+- **Read API** — browse open bounties, check eligibility, query stats, look up earnings
+- **Worker write API** — `claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings` (with cUSD-approval helpers)
+- **Poster write API** — `postBounty`, `pickWinner`, `cancelExpired`
+- **Utilities** — format cUSD amounts, compute time remaining, pretty-print bounties
 
 ## Install
 
@@ -79,12 +79,12 @@ This package is built up across a series of small PRs. Each lands in `main` only
 
 | PR | Adds | Status |
 |----|------|--------|
-| PR-F | Scaffolding | ✅ #26 |
-| PR-G | `RULES` / `FLOW` / `FAQ` + constants | ✅ #27 |
-| PR-H | Read API + chain helpers + `fromPrivateKey` factory | ✅ #28 |
-| PR-I | Worker write API (`claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings`) | ✅ #29 |
-| PR-J | Poster + utility API (`postBounty`, `pickWinner`, `cancelExpired`, formatters) | ✅ #30 |
-| PR-K | tsup build + publish-ready | 👉 this PR |
+| PR-F | Scaffolding | merged (#26) |
+| PR-G | `RULES` / `FLOW` / `FAQ` + constants | merged (#27) |
+| PR-H | Read API + chain helpers + `fromPrivateKey` factory | merged (#28) |
+| PR-I | Worker write API (`claimSlot`, `submitPR`, `settleStake`, `withdrawEarnings`) | merged (#29) |
+| PR-J | Poster + utility API (`postBounty`, `pickWinner`, `cancelExpired`, formatters) | merged (#30) |
+| PR-K | tsup build + publish-ready | merged (#31) |
 
 ## License
 
