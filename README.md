@@ -6,7 +6,7 @@ The first onchain marketplace where idle Claude Code subscriptions earn cUSD by 
 
 ## Status
 
-Hackathon: Celo Proof of Ship #8 (May 4-29, 2026). Submission Day 7 (May 21).
+Hackathon: Celo Proof of Ship #8 (May 4–29, 2026). Submission Day 7 (May 21). **Mainnet live** as of 2026-05-14.
 
 ## Workspace layout
 
@@ -26,57 +26,80 @@ See `Blueprint.md` for full specification and `CLAUDE.md` for working convention
 git clone https://github.com/yeheskieltame/claudelance.git
 cd claudelance
 pnpm install
-cp .env.example .env
+cp contracts/.env.example contracts/.env
 cd contracts && forge install && forge test
 ```
 
-## Networks
+## Live deployments
 
-- Dev: Celo Sepolia — `https://forno.celo-sepolia.celo-testnet.org/`
-- Prod: Celo Mainnet — `https://forno.celo.org`
-- cUSD (mainnet): `0x765DE816845861e75A25fCA122bb6898B8B1282a`
-- cUSD on Sepolia: no canonical contract — use `script/DeployMockCUSD.s.sol` to deploy a stand-in.
-
-## Live Sepolia deployment
+### Celo Mainnet (chain 42220) — PRIMARY
 
 | Contract | Address | Verified source |
 |----------|---------|-----------------|
-| ClaudelanceCore | [`0x8223cB87CfAAB9c1a5e524545C3097df1517191D`](https://celo-sepolia.blockscout.com/address/0x8223cB87CfAAB9c1a5e524545C3097df1517191D) | [Celoscan](https://sepolia.celoscan.io/address/0x8223cb87cfaab9c1a5e524545c3097df1517191d#code) |
-| MockCUSD (stand-in) | [`0x207D662337694796E76a4d5577DC72C93Cd92822`](https://celo-sepolia.blockscout.com/address/0x207D662337694796E76a4d5577DC72C93Cd92822) | [Celoscan](https://sepolia.celoscan.io/address/0x207d662337694796e76a4d5577dc72c93cd92822#code) |
+| **ClaudelanceCore** | [`0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C`](https://celoscan.io/address/0x2b638dfefa9e7538a8ceeebe7a89ce7de4641c5c) | [Celoscan source](https://celoscan.io/address/0x2b638dfefa9e7538a8ceeebe7a89ce7de4641c5c#code) |
+| cUSD (canonical) | [`0x765DE816845861e75A25fCA122bb6898B8B1282a`](https://celoscan.io/address/0x765de816845861e75a25fca122bb6898b8b1282a) | — |
 
-Both contracts verified on Celoscan via Etherscan API V2 (solc 0.8.24, optimizer runs=200, via-ir). Full deploy record: `contracts/deployments/celo-sepolia.json`.
+Operational addresses (distinct keys enforced by `Deploy.s.sol`):
 
-## Deploying to a new network
+- Owner: `0x110B992e63cbd34A40ff76AcCaa47Bd2064e7222` *(recommend rotating to a Safe multisig via `transferOwnership`)*
+- Treasury: `0xCC0cCac212999612BdDdEb607B33CC1a46F8A401`
+- CI Relayer: `0x1fEDda23c2945D59f3929e6C463cF685aC077ad5`
+- Deployer: `0xe6C226FA6d7fAb84046b0285b46951A002CEfdB7`
+
+Full mainnet record: `contracts/deployments/celo-mainnet.json`.
+
+### Celo Sepolia (chain 11142220) — staging
+
+| Contract | Address |
+|----------|---------|
+| ClaudelanceCore | [`0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8`](https://sepolia.celoscan.io/address/0xa2cae817311bbf725a7eaa45ad533b89396dffd8#code) |
+| MockCUSD (stand-in) | [`0x207D662337694796E76a4d5577DC72C93Cd92822`](https://sepolia.celoscan.io/address/0x207d662337694796e76a4d5577dc72c93cd92822#code) |
+
+All four contracts verified on Celoscan via Etherscan API V2 (solc 0.8.24, optimizer runs=200, viaIR).
+
+## Network endpoints
+
+- Sepolia RPC: `https://forno.celo-sepolia.celo-testnet.org/`
+- Mainnet RPC: `https://forno.celo.org`
+- Sepolia cUSD stand-in: deploy via `script/DeployMockCUSD.s.sol` (no canonical token on testnet).
+
+## Deploying
+
+### Mainnet (chain 42220 enforces distinct keys)
 
 ```bash
 cd contracts
-cp .env.example .env   # then fill DEPLOYER_PRIVATE_KEY, TREASURY_ADDRESS, CI_RELAYER_ADDRESS
+source .env   # must contain MAINNET_DEPLOYER_PRIVATE_KEY + MAINNET_{OWNER,TREASURY,RELAYER}_ADDRESS
 
-# 1. Testnet only — deploy a cUSD stand-in if the chain lacks one:
-forge script script/DeployMockCUSD.s.sol \
-  --rpc-url celo_sepolia --broadcast --private-key $DEPLOYER_PRIVATE_KEY
-
-# 2. Set CUSD_ADDRESS to the value printed above, then:
+CUSD_ADDRESS=$CUSD_MAINNET \
+TREASURY_ADDRESS=$MAINNET_TREASURY_ADDRESS \
+CI_RELAYER_ADDRESS=$MAINNET_RELAYER_ADDRESS \
+OWNER_ADDRESS=$MAINNET_OWNER_ADDRESS \
 forge script script/Deploy.s.sol \
-  --rpc-url celo_sepolia --broadcast --private-key $DEPLOYER_PRIVATE_KEY
-
-# 3. Verify source on Celoscan via Etherscan API V2 (needs ETHERSCAN_API_KEY):
-forge verify-contract --chain-id 11142220 \
-  --verifier etherscan \
-  --verifier-url "https://api.etherscan.io/v2/api?chainid=11142220" \
-  --etherscan-api-key $ETHERSCAN_API_KEY --watch \
-  <CORE_ADDRESS> src/ClaudelanceCore.sol:ClaudelanceCore \
-  --constructor-args $(cast abi-encode "constructor(address,address,address,address)" \
-    $CUSD_ADDRESS $TREASURY_ADDRESS $CI_RELAYER_ADDRESS $OWNER_ADDRESS)
+  --rpc-url $CELO_MAINNET_RPC \
+  --private-key $MAINNET_DEPLOYER_PRIVATE_KEY \
+  --broadcast --verify \
+  --etherscan-api-key $ETHERSCAN_API_KEY
 ```
 
-The unified Etherscan V2 key works for Celo plus 60+ other EVM chains
-— grab one at <https://etherscan.io/myapikey> and reuse it for the
-mainnet deploy. (Foundry's built-in chain alias is `celo-sepolia` with
-a dash, distinct from the underscore profile name in `foundry.toml`;
-using `--chain-id <numeric>` avoids the ambiguity.)
+`Deploy.s.sol` aborts on chainid 42220 if any two of `deployer/owner/treasury/relayer` collide. `ALLOW_SHARED_ADMIN_WALLETS` has no effect on mainnet.
 
-For mainnet, skip step 1 and point `CUSD_ADDRESS` at `0x765DE816845861e75A25fCA122bb6898B8B1282a`.
+### Sepolia (chain 11142220 — testnet shortcut)
+
+```bash
+# 1. Deploy a cUSD stand-in (only needed once per chain):
+forge script script/DeployMockCUSD.s.sol \
+  --rpc-url $CELO_SEPOLIA_RPC --broadcast --private-key $DEPLOYER_PRIVATE_KEY
+
+# 2. Set CUSD_ADDRESS to the value printed above, then:
+ALLOW_SHARED_ADMIN_WALLETS=true \
+forge script script/Deploy.s.sol \
+  --rpc-url $CELO_SEPOLIA_RPC --broadcast --verify \
+  --etherscan-api-key $ETHERSCAN_API_KEY \
+  --private-key $DEPLOYER_PRIVATE_KEY
+```
+
+The unified Etherscan V2 key works for Celo plus 60+ other EVM chains — get one at <https://etherscan.io/myapikey>.
 
 ## License
 
