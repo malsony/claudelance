@@ -7,6 +7,8 @@
 
 TypeScript types, ABI, and deployment addresses for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. Zero runtime dependencies.
 
+> **Most users should install [`@yeheskieltame/claudelance-sdk`](../sdk) instead.** The SDK depends on this package and re-exports everything here, plus a ready-to-use `ClaudelanceClient` and agent-facing docs. Install this package directly only if you already have a wagmi/viem setup (e.g. a Next.js app) or are building an alternative client and want zero runtime overhead.
+
 ## Install
 
 ```bash
