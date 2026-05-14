@@ -7,6 +7,7 @@ import { IClaudelanceCore } from "../src/interfaces/IClaudelanceCore.sol";
 import { MockCUSD } from "../src/mocks/MockCUSD.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract ClaudelanceCoreTest is Test {
@@ -76,6 +77,12 @@ contract ClaudelanceCoreTest is Test {
         core.attestCI(id, w, ok);
     }
 
+    function _withdraw(address who) internal returns (uint256 paid) {
+        paid = core.earnings(who);
+        vm.prank(who);
+        core.withdrawEarnings();
+    }
+
     function test_PostBounty_TransfersDepositAndEmits() public {
         uint256 posterBalanceBefore = cusd.balanceOf(poster);
         uint256 id = _post();
@@ -118,8 +125,11 @@ contract ClaudelanceCoreTest is Test {
         vm.expectRevert(ClaudelanceCore.InvalidDeadline.selector);
         core.postBounty(0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, 30 days, true);
 
-        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
         core.postBounty(0, "", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
+
+        vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
+        core.postBounty(0, "x", "", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
         vm.stopPrank();
     }
 
@@ -185,6 +195,14 @@ contract ClaudelanceCoreTest is Test {
         core.submitPR(id, "github.com/x/y/pull/1", bytes32(0), "{}");
     }
 
+    function test_SubmitPR_RevertsOnEmptyUrl() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        vm.expectRevert(ClaudelanceCore.NoSubmission.selector);
+        vm.prank(w1);
+        core.submitPR(id, "", bytes32(0), "{}");
+    }
+
     function test_AttestCI_OnlyRelayer() public {
         uint256 id = _post();
         _claim(id, w1);
@@ -205,6 +223,41 @@ contract ClaudelanceCoreTest is Test {
         _attest(id, w1, true);
     }
 
+    function test_AttestCI_BlockedWhilePaused() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+
+        vm.prank(owner);
+        core.pause();
+
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vm.prank(relayer);
+        core.attestCI(id, w1, true);
+    }
+
+    function test_AttestCI_FailsForNonClaimer() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        vm.expectRevert(ClaudelanceCore.NotClaimer.selector);
+        vm.prank(relayer);
+        core.attestCI(id, w2, true);
+    }
+
+    function test_AttestCI_FailsAfterResolution() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        vm.expectRevert(ClaudelanceCore.BountyNotOpen.selector);
+        vm.prank(relayer);
+        core.attestCI(id, w1, true);
+    }
+
     function test_PickWinner_FeeMathAndPayouts() public {
         uint256 id = _post();
         _claim(id, w1);
@@ -214,15 +267,13 @@ contract ClaudelanceCoreTest is Test {
         _attest(id, w1, true);
         _attest(id, w2, true);
 
-        uint256 treasuryBefore = cusd.balanceOf(treasury);
-
         vm.prank(poster);
         core.pickWinner(id, w1);
 
         uint96 expectedFee = uint96((uint256(AMOUNT) * 200) / 10_000);
         uint96 expectedPayout = AMOUNT - expectedFee;
 
-        assertEq(cusd.balanceOf(treasury), treasuryBefore + expectedFee);
+        assertEq(core.earnings(treasury), expectedFee, "treasury fee credited via earnings");
         assertEq(core.earnings(w1), uint256(expectedPayout) + STAKE);
         assertEq(core.earnings(w2), STAKE);
         assertEq(core.totalProtocolRevenue(), expectedFee);
@@ -231,6 +282,10 @@ contract ClaudelanceCoreTest is Test {
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
         assertEq(b.winner, w1);
+
+        uint256 treasuryBalanceBefore = cusd.balanceOf(treasury);
+        _withdraw(treasury);
+        assertEq(cusd.balanceOf(treasury), treasuryBalanceBefore + expectedFee);
     }
 
     function test_PickWinner_OnlyPoster() public {
@@ -277,8 +332,6 @@ contract ClaudelanceCoreTest is Test {
         _attest(id, w2, true);
         _attest(id, w3, false);
 
-        uint256 treasuryBefore = cusd.balanceOf(treasury);
-
         vm.prank(poster);
         core.pickWinner(id, w1);
 
@@ -286,7 +339,7 @@ contract ClaudelanceCoreTest is Test {
         assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE);
         assertEq(core.earnings(w2), STAKE);
         assertEq(core.earnings(w3), 0);
-        assertEq(cusd.balanceOf(treasury), treasuryBefore + fee + STAKE);
+        assertEq(core.earnings(treasury), fee + STAKE);
     }
 
     function test_PickWinner_NoStakeNoForfeit() public {
@@ -303,6 +356,32 @@ contract ClaudelanceCoreTest is Test {
 
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
+    }
+
+    function test_PickWinner_NoCI_RefundsLosersWithSubmission() public {
+        // ciRequired=false branch in _settleStakes: any submitter (winner or not) gets stake back,
+        // non-submitters forfeit. This covers the `refund = true` fallthrough.
+        vm.prank(poster);
+        uint256 id = core.postBounty(
+            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, false
+        );
+        _claim(id, w1);
+        _claim(id, w2);
+        _claim(id, w3);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/x/y/pull/1", bytes32(uint256(0x1)), "");
+        vm.prank(w2);
+        core.submitPR(id, "github.com/x/y/pull/2", bytes32(uint256(0x2)), "");
+        // w3 never submits -> stake forfeited
+
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
+        assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE, "winner gets payout + own stake");
+        assertEq(core.earnings(w2), STAKE, "non-winner submitter gets stake back (no-CI)");
+        assertEq(core.earnings(w3), 0, "non-submitter forfeits");
+        assertEq(core.earnings(treasury), fee + STAKE, "treasury gets fee + w3 forfeit");
     }
 
     function test_WithdrawEarnings_PaysAndClears() public {
@@ -325,6 +404,24 @@ contract ClaudelanceCoreTest is Test {
         core.withdrawEarnings();
     }
 
+    function test_WithdrawEarnings_AllowedWhilePaused() public {
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        _attest(id, w1, true);
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+
+        vm.prank(owner);
+        core.pause();
+
+        uint256 owed = core.earnings(w1);
+        uint256 before = cusd.balanceOf(w1);
+        vm.prank(w1);
+        core.withdrawEarnings();
+        assertEq(cusd.balanceOf(w1), before + owed, "earnings must still be withdrawable when paused");
+    }
+
     function test_CancelExpired_RefundsAndForfeits() public {
         uint256 id = _post();
         _claim(id, w1);
@@ -336,18 +433,21 @@ contract ClaudelanceCoreTest is Test {
         core.cancelExpired(id);
 
         vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
-        uint256 posterBefore = cusd.balanceOf(poster);
-        uint256 treasuryBefore = cusd.balanceOf(treasury);
 
         core.cancelExpired(id);
 
-        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
+        assertEq(core.earnings(poster), AMOUNT, "poster refund credited");
         assertEq(core.earnings(w1), STAKE);
         assertEq(core.earnings(w2), 0);
-        assertEq(cusd.balanceOf(treasury), treasuryBefore + STAKE);
+        assertEq(core.earnings(treasury), STAKE, "w2 stake forfeited (never submitted)");
 
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Cancelled));
+
+        uint256 posterBefore = cusd.balanceOf(poster);
+        vm.prank(poster);
+        core.withdrawEarnings();
+        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
     }
 
     function test_Pause_BlocksNewBountiesButAllowsResolution() public {
@@ -375,25 +475,26 @@ contract ClaudelanceCoreTest is Test {
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
     }
 
-    function test_OnlyOwnerCanPauseAndSet() public {
+    function test_OnlyOwnerCanPauseAndAdmin() public {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
         core.pause();
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
-        core.setTreasury(stranger);
+        core.proposeTreasury(stranger);
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
-        core.setCIRelayer(stranger);
+        core.proposeCIRelayer(stranger);
 
-        vm.startPrank(owner);
-        core.setTreasury(makeAddr("newT"));
-        core.setCIRelayer(makeAddr("newR"));
-        vm.stopPrank();
-        assertEq(core.treasury(), makeAddr("newT"));
-        assertEq(core.ciRelayer(), makeAddr("newR"));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.cancelPendingTreasury();
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.cancelPendingCIRelayer();
     }
 
     function test_Stats_IncrementsCorrectly() public {
@@ -507,11 +608,10 @@ contract ClaudelanceCoreTest is Test {
 
         vm.warp(block.timestamp + DEADLINE + 1);
 
-        uint256 posterBefore = cusd.balanceOf(poster);
         vm.prank(poster);
         core.cancelExpired(id);
 
-        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
+        assertEq(core.earnings(poster), AMOUNT);
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Cancelled));
     }
@@ -524,11 +624,10 @@ contract ClaudelanceCoreTest is Test {
 
         vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
 
-        uint256 posterBefore = cusd.balanceOf(poster);
         vm.prank(stranger);
         core.cancelExpired(id);
 
-        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
+        assertEq(core.earnings(poster), AMOUNT);
         assertEq(core.earnings(w1), STAKE);
     }
 
@@ -561,32 +660,170 @@ contract ClaudelanceCoreTest is Test {
         new ClaudelanceCore(IERC20(address(cusd)), treasury, relayer, owner);
     }
 
-    function test_SetTreasury_EmitsAndStores() public {
+    function test_Constructor_RevertsOnZeroAddresses() public {
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        new ClaudelanceCore(IERC20(address(0)), treasury, relayer, owner);
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        new ClaudelanceCore(IERC20(address(cusd)), address(0), relayer, owner);
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        new ClaudelanceCore(IERC20(address(cusd)), treasury, address(0), owner);
+    }
+
+    // ---------------------------------------------------------------- //
+    //                    Timelock: treasury & relayer                  //
+    // ---------------------------------------------------------------- //
+
+    function test_ProposeTreasury_StoresPending() public {
         address newT = makeAddr("newT");
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.TreasuryProposed(newT, uint64(block.timestamp + core.ADMIN_TIMELOCK()));
+        vm.prank(owner);
+        core.proposeTreasury(newT);
+
+        (address proposed, uint64 effectiveAt) = core.pendingTreasury();
+        assertEq(proposed, newT);
+        assertEq(effectiveAt, uint64(block.timestamp + core.ADMIN_TIMELOCK()));
+        assertEq(core.treasury(), treasury, "treasury not yet rotated");
+    }
+
+    function test_ApplyTreasury_RevertsBeforeTimelock() public {
+        address newT = makeAddr("newT");
+        vm.prank(owner);
+        core.proposeTreasury(newT);
+        vm.expectRevert(ClaudelanceCore.TimelockNotElapsed.selector);
+        core.applyTreasury();
+    }
+
+    function test_ApplyTreasury_AfterTimelockRotates() public {
+        address newT = makeAddr("newT");
+        vm.prank(owner);
+        core.proposeTreasury(newT);
+
+        vm.warp(block.timestamp + core.ADMIN_TIMELOCK());
         vm.expectEmit(true, true, false, false);
         emit IClaudelanceCore.TreasuryUpdated(treasury, newT);
-        vm.prank(owner);
-        core.setTreasury(newT);
+        core.applyTreasury();
         assertEq(core.treasury(), newT);
+
+        (address proposed,) = core.pendingTreasury();
+        assertEq(proposed, address(0), "pending cleared after apply");
     }
 
-    function test_SetCIRelayer_EmitsAndStores() public {
-        address newR = makeAddr("newR");
-        vm.expectEmit(true, true, false, false);
-        emit IClaudelanceCore.CIRelayerUpdated(relayer, newR);
+    function test_ApplyTreasury_RevertsIfNoPending() public {
+        vm.expectRevert(ClaudelanceCore.NoPendingChange.selector);
+        core.applyTreasury();
+    }
+
+    function test_CancelPendingTreasury_Clears() public {
+        address newT = makeAddr("newT");
         vm.prank(owner);
-        core.setCIRelayer(newR);
-        assertEq(core.ciRelayer(), newR);
+        core.proposeTreasury(newT);
+
+        vm.expectEmit(true, false, false, false);
+        emit IClaudelanceCore.TreasuryProposalCancelled(newT);
+        vm.prank(owner);
+        core.cancelPendingTreasury();
+
+        (address proposed,) = core.pendingTreasury();
+        assertEq(proposed, address(0));
     }
 
-    function test_AdminSetters_RejectZeroAddress() public {
+    function test_CancelPendingTreasury_RevertsIfNoPending() public {
+        vm.prank(owner);
+        vm.expectRevert(ClaudelanceCore.NoPendingChange.selector);
+        core.cancelPendingTreasury();
+    }
+
+    function test_ProposeTreasury_RejectsZeroOrSelf() public {
         vm.startPrank(owner);
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        core.setTreasury(address(0));
+        core.proposeTreasury(address(0));
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        core.setCIRelayer(address(0));
+        core.proposeTreasury(address(core));
         vm.stopPrank();
     }
+
+    function test_ProposeCIRelayer_FullCycle() public {
+        address newR = makeAddr("newR");
+
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.CIRelayerProposed(newR, uint64(block.timestamp + core.ADMIN_TIMELOCK()));
+        vm.prank(owner);
+        core.proposeCIRelayer(newR);
+
+        vm.expectRevert(ClaudelanceCore.TimelockNotElapsed.selector);
+        core.applyCIRelayer();
+
+        vm.warp(block.timestamp + core.ADMIN_TIMELOCK());
+
+        vm.expectEmit(true, true, false, false);
+        emit IClaudelanceCore.CIRelayerUpdated(relayer, newR);
+        core.applyCIRelayer();
+        assertEq(core.ciRelayer(), newR);
+
+        // old relayer no longer authorized
+        uint256 id = _post();
+        _claim(id, w1);
+        _submit(id, w1);
+        vm.expectRevert(ClaudelanceCore.NotRelayer.selector);
+        vm.prank(relayer);
+        core.attestCI(id, w1, true);
+
+        vm.prank(newR);
+        core.attestCI(id, w1, true);
+    }
+
+    function test_ApplyCIRelayer_RevertsIfNoPending() public {
+        vm.expectRevert(ClaudelanceCore.NoPendingChange.selector);
+        core.applyCIRelayer();
+    }
+
+    function test_ProposeCIRelayer_RejectsZero() public {
+        vm.prank(owner);
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        core.proposeCIRelayer(address(0));
+    }
+
+    function test_CancelPendingCIRelayer() public {
+        address newR = makeAddr("newR");
+        vm.prank(owner);
+        core.proposeCIRelayer(newR);
+
+        vm.expectEmit(true, false, false, false);
+        emit IClaudelanceCore.CIRelayerProposalCancelled(newR);
+        vm.prank(owner);
+        core.cancelPendingCIRelayer();
+
+        vm.expectRevert(ClaudelanceCore.NoPendingChange.selector);
+        vm.prank(owner);
+        core.cancelPendingCIRelayer();
+    }
+
+    // ---------------------------------------------------------------- //
+    //                         Ownable2Step                             //
+    // ---------------------------------------------------------------- //
+
+    function test_Ownable2Step_RequiresAccept() public {
+        address newOwner = makeAddr("newOwner");
+        vm.prank(owner);
+        core.transferOwnership(newOwner);
+        assertEq(core.owner(), owner, "owner stays until acceptOwnership");
+        assertEq(core.pendingOwner(), newOwner);
+
+        // wrong account cannot accept
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.acceptOwnership();
+
+        vm.prank(newOwner);
+        core.acceptOwnership();
+        assertEq(core.owner(), newOwner);
+        assertEq(core.pendingOwner(), address(0));
+    }
+
+    // ---------------------------------------------------------------- //
+    //                          rescueERC20                             //
+    // ---------------------------------------------------------------- //
 
     function test_RescueERC20_TransfersStrayTokenAndEmits() public {
         MockCUSD other = new MockCUSD();
@@ -624,6 +861,10 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(stranger);
         core.rescueERC20(IERC20(address(other)), stranger, 1);
     }
+
+    // ---------------------------------------------------------------- //
+    //                            Events                                //
+    // ---------------------------------------------------------------- //
 
     function test_Events_PostBountyEmitsExpectedFields() public {
         bytes32 reqHash = keccak256("hash");
@@ -669,10 +910,10 @@ contract ClaudelanceCoreTest is Test {
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
         uint96 payout = AMOUNT - fee;
 
-        vm.expectEmit(true, true, false, true);
-        emit IClaudelanceCore.BountyResolved(id, w1, payout, fee);
         vm.expectEmit(false, false, false, true);
         emit IClaudelanceCore.ProtocolRevenueAccrued(fee, fee);
+        vm.expectEmit(true, true, false, true);
+        emit IClaudelanceCore.BountyResolved(id, w1, payout, fee);
         vm.expectEmit(true, true, false, true);
         emit IClaudelanceCore.StakeRefunded(id, w1, STAKE);
 
@@ -695,8 +936,6 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(w1);
         core.submitPR(id, "github.com/x/y/pull/1", bytes32(uint256(0xabc)), "");
 
-        uint256 treasuryBefore = cusd.balanceOf(treasury);
-
         vm.prank(poster);
         core.pickWinner(id, w1);
 
@@ -704,7 +943,7 @@ contract ClaudelanceCoreTest is Test {
         uint256 payout = uint256(amount) - fee;
 
         assertEq(payout + fee, uint256(amount), "payout + fee must equal amount");
-        assertEq(cusd.balanceOf(treasury), treasuryBefore + fee, "treasury fee credited");
+        assertEq(core.earnings(treasury), fee, "treasury fee credited via earnings");
         assertEq(core.earnings(w1), payout, "winner earnings = payout (no stake in this fuzz)");
     }
 

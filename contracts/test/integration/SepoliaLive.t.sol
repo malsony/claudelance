@@ -136,7 +136,7 @@ contract SepoliaLiveTest is Test {
         uint256 startVolume = core.totalBountyVolume();
         uint256 startResolved = core.totalBountiesResolved();
         uint256 startRevenue = core.totalProtocolRevenue();
-        uint256 treasuryBefore = cusd.balanceOf(liveTreasury);
+        uint256 treasuryEarningsBefore = core.earnings(liveTreasury);
 
         uint256 id = _post();
 
@@ -155,7 +155,11 @@ contract SepoliaLiveTest is Test {
 
         assertEq(core.earnings(w1), uint256(expectedPayout) + STAKE, "winner: payout + stake refund");
         assertEq(core.earnings(w2), STAKE, "good-faith loser: stake refund only");
-        assertEq(cusd.balanceOf(liveTreasury), treasuryBefore + expectedFee, "treasury credited fee");
+        assertEq(
+            core.earnings(liveTreasury),
+            treasuryEarningsBefore + expectedFee,
+            "treasury fee credited via earnings (pull pattern)"
+        );
         assertEq(core.totalBountyVolume(), startVolume + AMOUNT, "volume += AMOUNT");
         assertEq(core.totalBountiesResolved(), startResolved + 1, "resolved counter +1");
         assertEq(core.totalProtocolRevenue(), startRevenue + expectedFee, "revenue += fee");
@@ -190,17 +194,21 @@ contract SepoliaLiveTest is Test {
         _submit(id, w1, "github.com/yeheskieltame/claudelance-sandbox/pull/D");
         _attest(id, w1, true);
 
-        uint256 posterBefore = cusd.balanceOf(poster);
-        uint256 treasuryBefore = cusd.balanceOf(liveTreasury);
+        uint256 posterEarningsBefore = core.earnings(poster);
+        uint256 treasuryEarningsBefore = core.earnings(liveTreasury);
 
         vm.warp(block.timestamp + DEADLINE + core.RESOLUTION_GRACE_PERIOD() + 1);
         vm.prank(stranger);
         core.cancelExpired(id);
 
-        assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT, "poster refunded");
+        assertEq(core.earnings(poster), posterEarningsBefore + AMOUNT, "poster refund credited via earnings");
         assertEq(core.earnings(w1), STAKE, "passing-CI loser keeps stake");
         assertEq(core.earnings(w2), 0, "no-submission worker forfeits");
-        assertEq(cusd.balanceOf(liveTreasury), treasuryBefore + STAKE, "treasury collects forfeited stake");
+        assertEq(
+            core.earnings(liveTreasury),
+            treasuryEarningsBefore + STAKE,
+            "treasury credited forfeited stake via earnings"
+        );
     }
 
     function test_Live_SubmitPRIsOneShot() public {
@@ -243,8 +251,11 @@ contract SepoliaLiveTest is Test {
         vm.expectRevert(ClaudelanceCore.InvalidDeadline.selector);
         core.postBounty(0, "x", "x", bytes32(0), AMOUNT, SLOTS, STAKE, 30 days, true);
 
-        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
         core.postBounty(0, "", "x", bytes32(0), AMOUNT, SLOTS, STAKE, DEADLINE, true);
+
+        vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
+        core.postBounty(0, "x", "", bytes32(0), AMOUNT, SLOTS, STAKE, DEADLINE, true);
 
         vm.stopPrank();
     }
@@ -471,39 +482,55 @@ contract SepoliaLiveTest is Test {
     //                       Admin + pause + rescue
     // -----------------------------------------------------------------------
 
-    function test_Live_AdminSetters_OnlyOwnerAndEmit() public {
+    function test_Live_AdminTimelock_OnlyOwnerAndApplyAfterDelay() public {
         address newT = makeAddr("fork-treasury-2");
         address newR = makeAddr("fork-relayer-2");
 
-        // Non-owner cannot set.
+        // Non-owner cannot propose.
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
-        core.setTreasury(newT);
+        core.proposeTreasury(newT);
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
-        core.setCIRelayer(newR);
+        core.proposeCIRelayer(newR);
 
-        // Zero address rejected even from the owner.
+        // Zero / self rejected even from owner.
+        vm.startPrank(liveOwner);
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        vm.prank(liveOwner);
-        core.setTreasury(address(0));
-
+        core.proposeTreasury(address(0));
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        vm.prank(liveOwner);
-        core.setCIRelayer(address(0));
+        core.proposeTreasury(address(core));
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        core.proposeCIRelayer(address(0));
+        vm.stopPrank();
 
-        // Happy path: events fire with (previous, current).
+        // Apply before propose reverts.
+        vm.expectRevert(ClaudelanceCore.NoPendingChange.selector);
+        core.applyTreasury();
+
+        // Happy path: propose -> wait -> apply.
+        uint64 expectedEffective = uint64(block.timestamp + core.ADMIN_TIMELOCK());
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.TreasuryProposed(newT, expectedEffective);
+        vm.prank(liveOwner);
+        core.proposeTreasury(newT);
+        assertEq(core.treasury(), liveTreasury, "treasury unchanged before apply");
+
+        vm.expectRevert(ClaudelanceCore.TimelockNotElapsed.selector);
+        core.applyTreasury();
+
+        vm.warp(block.timestamp + core.ADMIN_TIMELOCK());
         vm.expectEmit(true, true, false, false);
         emit IClaudelanceCore.TreasuryUpdated(liveTreasury, newT);
-        vm.prank(liveOwner);
-        core.setTreasury(newT);
+        core.applyTreasury();
         assertEq(core.treasury(), newT);
 
-        vm.expectEmit(true, true, false, false);
-        emit IClaudelanceCore.CIRelayerUpdated(liveRelayer, newR);
+        // Same flow for relayer.
         vm.prank(liveOwner);
-        core.setCIRelayer(newR);
+        core.proposeCIRelayer(newR);
+        vm.warp(block.timestamp + core.ADMIN_TIMELOCK());
+        core.applyCIRelayer();
         assertEq(core.ciRelayer(), newR);
     }
 

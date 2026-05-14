@@ -34,6 +34,11 @@ interface IClaudelanceCore {
         string metadata;
     }
 
+    struct PendingAddress {
+        address proposed;
+        uint64 effectiveAt;
+    }
+
     event BountyPosted(
         uint256 indexed bountyId,
         address indexed poster,
@@ -52,10 +57,14 @@ interface IClaudelanceCore {
     event BountyCancelled(uint256 indexed bountyId, address indexed poster, uint96 refundAmount);
     event StakeRefunded(uint256 indexed bountyId, address indexed worker, uint96 amount);
     event StakeForfeited(uint256 indexed bountyId, address indexed worker, uint96 amount);
-    event EarningsWithdrawn(address indexed worker, uint256 amount);
+    event EarningsWithdrawn(address indexed account, uint256 amount);
     event ProtocolRevenueAccrued(uint256 amount, uint256 cumulative);
+    event CIRelayerProposed(address indexed proposed, uint64 effectiveAt);
     event CIRelayerUpdated(address indexed previous, address indexed current);
+    event CIRelayerProposalCancelled(address indexed proposed);
+    event TreasuryProposed(address indexed proposed, uint64 effectiveAt);
     event TreasuryUpdated(address indexed previous, address indexed current);
+    event TreasuryProposalCancelled(address indexed proposed);
     event ERC20Rescued(address indexed token, address indexed to, uint256 amount);
 
     function postBounty(
