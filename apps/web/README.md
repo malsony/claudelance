@@ -19,11 +19,11 @@ MiniPay-friendly Next.js 15 frontend for the [Claudelance](../../README.md) boun
 
 | Route | State | Notes |
 |-------|-------|-------|
-| `/` | ✅ live | Hero + live mainnet stats + feature grid |
-| `/post` | ⏳ pending | Multi-step bounty post form |
-| `/bounty/[id]` | ⏳ pending | Bounty detail + claim/submit/pick |
-| `/stats` | ⏳ pending | Richer judge-facing dashboard |
-| `/install` | ⏳ pending | "Become a worker" onboarding guide |
+| `/` | live | Hero + live mainnet stats + feature grid |
+| `/post` | pending | Multi-step bounty post form |
+| `/bounty/[id]` | pending | Bounty detail + claim/submit/pick |
+| `/stats` | pending | Richer judge-facing dashboard |
+| `/install` | pending | "Become a worker" onboarding guide |
 
 ## Live deployments the UI reads from
 
@@ -40,7 +40,7 @@ Both addresses are sourced from `contracts/deployments/celo-{mainnet,sepolia}.js
 pnpm install              # from monorepo root
 cp .env.example .env      # or skip — fallback defaults work
 pnpm --filter @claudelance/web dev
-# → http://localhost:3000
+# -> http://localhost:3000
 ```
 
 No backend service is required for the landing page; every chain read is a server-side viem multicall.
@@ -69,10 +69,10 @@ NEXT_PUBLIC_SEPOLIA_RPC=          # override Sepolia RPC if you have one
 
 ```
 lib/
-├── chain.ts        viem defineChain for Celo mainnet + Sepolia
-├── contracts.ts    typed deployment addresses + read-only ABI surface
-├── stats.ts        server-side multicall used by the landing stats card
-└── minipay.ts      useMiniPayDetection — Opera MiniPay in-app browser check
+  chain.ts        viem defineChain for Celo mainnet + Sepolia
+  contracts.ts    typed deployment addresses + read-only ABI surface
+  stats.ts        server-side multicall used by the landing stats card
+  minipay.ts      useMiniPayDetection, Opera MiniPay in-app browser check
 ```
 
 Write-side wagmi connectors land alongside the post-bounty form in the upcoming `/post` work.
