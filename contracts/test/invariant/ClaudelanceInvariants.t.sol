@@ -6,7 +6,9 @@ import { Test } from "forge-std/Test.sol";
 import { ClaudelanceCore } from "../../src/ClaudelanceCore.sol";
 import { IClaudelanceCore } from "../../src/interfaces/IClaudelanceCore.sol";
 import { MockCUSD } from "../../src/mocks/MockCUSD.sol";
+import { MockIdentityRegistry } from "../../src/mocks/MockIdentityRegistry.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import { ClaudelanceHandler } from "./ClaudelanceHandler.sol";
 
@@ -18,16 +20,21 @@ import { ClaudelanceHandler } from "./ClaudelanceHandler.sol";
 contract ClaudelanceInvariants is Test {
     ClaudelanceCore internal core;
     MockCUSD internal cusd;
+    MockIdentityRegistry internal identity;
     ClaudelanceHandler internal handler;
     address internal treasury = makeAddr("inv-treasury");
     address internal relayer = makeAddr("inv-relayer");
     address internal owner_ = makeAddr("inv-owner");
+    address internal reputation = makeAddr("inv-reputation");
 
     address[] internal actorAddrs;
 
     function setUp() public {
         cusd = new MockCUSD();
-        core = new ClaudelanceCore(IERC20(address(cusd)), treasury, relayer, owner_);
+        identity = new MockIdentityRegistry();
+        core = new ClaudelanceCore(treasury, relayer, owner_, IERC721(address(identity)), reputation);
+        vm.prank(owner_);
+        core.allowToken(IERC20(address(cusd)), 0.5e18);
 
         address[] memory actors = new address[](5);
         actors[0] = makeAddr("a1");
@@ -37,7 +44,7 @@ contract ClaudelanceInvariants is Test {
         actors[4] = makeAddr("a5");
         for (uint256 i = 0; i < actors.length; i++) actorAddrs.push(actors[i]);
 
-        handler = new ClaudelanceHandler(core, cusd, treasury, relayer, actors);
+        handler = new ClaudelanceHandler(core, cusd, identity, treasury, relayer, actors);
 
         targetContract(address(handler));
 
@@ -72,7 +79,7 @@ contract ClaudelanceInvariants is Test {
         address[] memory all = _allKnownAddresses();
         uint256 sumEarnings;
         for (uint256 i = 0; i < all.length; i++) {
-            sumEarnings += core.earnings(all[i]);
+            sumEarnings += core.earnings(all[i], address(cusd));
         }
         assertGe(balance, sumEarnings, "core balance must cover all earnings");
     }
@@ -86,7 +93,7 @@ contract ClaudelanceInvariants is Test {
     uint256 private _lastRevenue;
 
     function invariant_protocolRevenueMonotonic() public {
-        uint256 r = core.totalProtocolRevenue();
+        uint256 r = core.totalProtocolRevenue(address(cusd));
         assertGe(r, _lastRevenue, "totalProtocolRevenue regressed");
         _lastRevenue = r;
     }

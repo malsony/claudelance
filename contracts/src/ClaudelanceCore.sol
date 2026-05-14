@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -11,11 +12,20 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { IClaudelanceCore } from "./interfaces/IClaudelanceCore.sol";
 
 /// @title ClaudelanceCore
-/// @notice Onchain marketplace where workers compete to solve GitHub bounties paid in cUSD.
+/// @notice Onchain marketplace where AI-agent workers compete to solve GitHub bounties.
+///         v2: Multi-token escrow (cUSD / CELO / USDC, whitelist is one-way).
+///         Workers must hold an ERC-8004 Identity NFT to claim a slot.
 contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pausable {
     using SafeERC20 for IERC20;
 
-    IERC20 public immutable cUSD;
+    /// @notice ERC-8004 Identity Registry. Workers must hold >=1 NFT here to claimSlot.
+    ///         Celo Sepolia: 0x8004A818BFB912233c491871b3d84c89A494BD9e
+    ///         Celo Mainnet: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432
+    IERC721 public immutable identityRegistry;
+
+    /// @notice ERC-8004 Reputation Registry. Stored for Phase 2 feedback integration.
+    address public immutable reputationRegistry;
+
     address public ciRelayer;
     address public treasury;
 
@@ -27,13 +37,23 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
     uint8 public constant MAX_SLOTS = 20;
     uint64 public constant MIN_DEADLINE = 1 days;
     uint64 public constant MAX_DEADLINE = 14 days;
-    uint96 public constant MIN_BOUNTY = 0.5e18;
     uint64 public constant RESOLUTION_GRACE_PERIOD = 3 days;
     uint64 public constant ADMIN_TIMELOCK = 2 days;
     uint64 public constant PROPOSAL_VALIDITY_WINDOW = 14 days;
 
-    uint256 public totalBountyVolume;
-    uint256 public totalProtocolRevenue;
+    /// @dev One-way: once true, never flipped back. Keeps `rescueERC20` honest
+    ///      and stops a malicious owner from stranding live escrows.
+    ///
+    /// IMPORTANT: whitelisted tokens MUST be non-fee-on-transfer, non-rebasing,
+    /// and non-callback (no ERC777/ERC1363 hooks). cUSD, CELO ERC20, and USDC
+    /// on Celo all satisfy this. The contract credits `totalBountyVolume[t]`
+    /// and `earnings[*][t]` based on the SENT amount, not the received amount,
+    /// so a deflationary token would over-credit and brick the last withdrawal.
+    mapping(address => bool) public allowedToken;
+    mapping(address => uint256) public minBounty;
+
+    mapping(address => uint256) public totalBountyVolume;
+    mapping(address => uint256) public totalProtocolRevenue;
     uint256 public totalBountiesResolved;
     uint256 public uniquePosterCount;
     uint256 public uniqueWorkerCount;
@@ -44,15 +64,19 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
     mapping(uint256 => address[]) private _claimers;
     mapping(uint256 => mapping(address => bool)) public hasClaimed;
     mapping(uint256 => mapping(address => Submission)) private _submissions;
-    mapping(address => uint256) public earnings;
+    mapping(address => mapping(address => uint256)) public earnings;
     mapping(address => bool) public hasPosted;
     mapping(address => bool) public hasWorked;
 
     error InvalidAmount();
+    error InvalidStake();
     error InvalidSlots();
     error InvalidDeadline();
     error InvalidAddress();
     error InvalidUrl();
+    error TokenNotAllowed();
+    error TokenAlreadyAllowed();
+    error NotTargetedWorker();
     error BountyNotOpen();
     error BountyNotExpired();
     error DeadlinePassed();
@@ -66,32 +90,63 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
     error NotRelayer();
     error NothingToWithdraw();
     error GracePeriodActive();
-    error CannotRescueCUSD();
+    error CannotRescueEscrowToken();
     error NoPendingChange();
     error TimelockNotElapsed();
     error ProposalExpired();
     error BountyNotResolved();
     error StakeAlreadySettled();
     error NoStakeRequired();
+    error NoAgentIdentity();
 
     modifier onlyRelayer() {
         if (msg.sender != ciRelayer) revert NotRelayer();
         _;
     }
 
-    constructor(IERC20 _cUSD, address _treasury, address _ciRelayer, address _owner) Ownable(_owner) {
-        if (address(_cUSD) == address(0) || _treasury == address(0) || _ciRelayer == address(0)) {
+    constructor(
+        address _treasury,
+        address _ciRelayer,
+        address _owner,
+        IERC721 _identityRegistry,
+        address _reputationRegistry
+    ) Ownable(_owner) {
+        if (
+            _treasury == address(0) || _ciRelayer == address(0) || address(_identityRegistry) == address(0)
+                || _reputationRegistry == address(0)
+        ) {
             revert InvalidAddress();
         }
-        cUSD = _cUSD;
         treasury = _treasury;
         ciRelayer = _ciRelayer;
+        identityRegistry = _identityRegistry;
+        reputationRegistry = _reputationRegistry;
 
         emit TreasuryUpdated(address(0), _treasury);
         emit CIRelayerUpdated(address(0), _ciRelayer);
     }
 
+    /// @notice Whitelist a token. One-way: cannot be flipped off after enable.
+    function allowToken(IERC20 token, uint256 minBountyAmount) external onlyOwner {
+        address t = address(token);
+        if (t == address(0)) revert InvalidAddress();
+        if (allowedToken[t]) revert TokenAlreadyAllowed();
+        allowedToken[t] = true;
+        minBounty[t] = minBountyAmount;
+        emit TokenAllowed(t, minBountyAmount);
+    }
+
+    /// @notice Adjust the per-token floor. Only takes effect for future bounties.
+    function setMinBounty(IERC20 token, uint256 minBountyAmount) external onlyOwner {
+        address t = address(token);
+        if (!allowedToken[t]) revert TokenNotAllowed();
+        minBounty[t] = minBountyAmount;
+        emit MinBountyUpdated(t, minBountyAmount);
+    }
+
+    /// @notice Open marketplace bounty. Any ERC-8004 registered agent can claim a slot.
     function postBounty(
+        IERC20 token,
         uint8 bountyType,
         string calldata targetRepoUrl,
         string calldata instructionUrl,
@@ -101,8 +156,68 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         uint96 stake,
         uint64 deadline,
         bool ciRequired
-    ) external whenNotPaused nonReentrant returns (uint256 bountyId) {
-        if (amount < MIN_BOUNTY) revert InvalidAmount();
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        return _post(
+            token,
+            address(0),
+            bountyType,
+            targetRepoUrl,
+            instructionUrl,
+            requirementsHash,
+            amount,
+            maxSlots,
+            stake,
+            deadline,
+            ciRequired
+        );
+    }
+
+    /// @notice Direct-hire bounty. Only `targetWorker` can claim. CI gate is
+    ///         skipped (trust-based); maxSlots is forced to 1.
+    function postDirectHire(
+        IERC20 token,
+        address targetWorker,
+        uint8 bountyType,
+        string calldata targetRepoUrl,
+        string calldata instructionUrl,
+        bytes32 requirementsHash,
+        uint96 amount,
+        uint96 stake,
+        uint64 deadline
+    ) external whenNotPaused nonReentrant returns (uint256) {
+        if (targetWorker == address(0)) revert InvalidAddress();
+        return _post(
+            token,
+            targetWorker,
+            bountyType,
+            targetRepoUrl,
+            instructionUrl,
+            requirementsHash,
+            amount,
+            1,
+            stake,
+            deadline,
+            false
+        );
+    }
+
+    function _post(
+        IERC20 token,
+        address targetWorker,
+        uint8 bountyType,
+        string calldata targetRepoUrl,
+        string calldata instructionUrl,
+        bytes32 requirementsHash,
+        uint96 amount,
+        uint8 maxSlots,
+        uint96 stake,
+        uint64 deadline,
+        bool ciRequired
+    ) internal returns (uint256 bountyId) {
+        address t = address(token);
+        if (!allowedToken[t]) revert TokenNotAllowed();
+        if (amount < minBounty[t]) revert InvalidAmount();
+        if (stake == 0) revert InvalidStake();
         if (maxSlots == 0 || maxSlots > MAX_SLOTS) revert InvalidSlots();
         if (deadline < MIN_DEADLINE || deadline > MAX_DEADLINE) revert InvalidDeadline();
         if (bytes(targetRepoUrl).length == 0 || bytes(instructionUrl).length == 0) revert InvalidUrl();
@@ -115,27 +230,31 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
             amount: amount,
             winner: address(0),
             stakeRequired: stake,
+            token: t,
             deadline: absoluteDeadline,
             maxSlots: maxSlots,
             claimedSlots: 0,
             bountyType: bountyType,
             ciRequired: ciRequired,
+            targetWorker: targetWorker,
             status: BountyStatus.Open,
             targetRepoUrl: targetRepoUrl,
             instructionUrl: instructionUrl,
             requirementsHash: requirementsHash
         });
 
-        totalBountyVolume += amount;
+        totalBountyVolume[t] += amount;
         bountyCountByType[bountyType] += 1;
         if (!hasPosted[msg.sender]) {
             hasPosted[msg.sender] = true;
             uniquePosterCount += 1;
         }
 
-        cUSD.safeTransferFrom(msg.sender, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit BountyPosted(bountyId, msg.sender, bountyType, amount, maxSlots, targetRepoUrl, requirementsHash);
+        emit BountyPosted(
+            bountyId, msg.sender, t, targetWorker, bountyType, amount, stake, maxSlots, targetRepoUrl, requirementsHash
+        );
     }
 
     function claimSlot(uint256 bountyId) external whenNotPaused nonReentrant {
@@ -144,6 +263,10 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         if (block.timestamp >= b.deadline) revert DeadlinePassed();
         if (b.claimedSlots >= b.maxSlots) revert SlotsFull();
         if (hasClaimed[bountyId][msg.sender]) revert AlreadyClaimed();
+        // Direct-hire bounties are gated to the chosen worker.
+        if (b.targetWorker != address(0) && msg.sender != b.targetWorker) revert NotTargetedWorker();
+        // ERC-8004 gate: workers must be registered AI agents to claim work.
+        if (identityRegistry.balanceOf(msg.sender) == 0) revert NoAgentIdentity();
 
         hasClaimed[bountyId][msg.sender] = true;
         b.claimedSlots += 1;
@@ -155,7 +278,7 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         }
 
         if (b.stakeRequired > 0) {
-            cUSD.safeTransferFrom(msg.sender, address(this), b.stakeRequired);
+            IERC20(b.token).safeTransferFrom(msg.sender, address(this), b.stakeRequired);
         }
 
         emit SlotClaimed(bountyId, msg.sender);
@@ -208,19 +331,22 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         b.status = BountyStatus.Resolved;
         b.winner = winner;
 
+        address t = b.token;
         uint96 amount = b.amount;
         // forge-lint: disable-next-line(unsafe-typecast)
         uint96 fee = uint96((uint256(amount) * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR);
         uint96 payout = amount - fee;
 
-        earnings[winner] += payout;
+        earnings[winner][t] += payout;
         if (fee > 0) {
-            earnings[treasury] += fee;
-            uint256 newRevenue = totalProtocolRevenue + fee;
-            totalProtocolRevenue = newRevenue;
-            emit ProtocolRevenueAccrued(fee, newRevenue);
+            earnings[treasury][t] += fee;
+            uint256 newRevenue = totalProtocolRevenue[t] + fee;
+            totalProtocolRevenue[t] = newRevenue;
+            emit ProtocolRevenueAccrued(t, fee, newRevenue);
         }
-        unchecked { ++totalBountiesResolved; }
+        unchecked {
+            ++totalBountiesResolved;
+        }
 
         emit BountyResolved(bountyId, winner, payout, fee);
     }
@@ -240,14 +366,14 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         b.status = BountyStatus.Cancelled;
 
         uint96 refund = b.amount;
-        earnings[poster_] += refund;
+        earnings[poster_][b.token] += refund;
         emit BountyCancelled(bountyId, poster_, refund);
     }
 
     /// @notice Permissionless stake settlement. Refund-vs-forfeit rules:
-    ///         winner → refund; non-submitter → forfeit;
-    ///         CI required → refund iff `ciPassed`; CI not required → refund.
-    ///         Forfeits credit `treasury` and bump `totalProtocolRevenue`.
+    ///         winner -> refund; non-submitter -> forfeit;
+    ///         CI required -> refund iff `ciPassed`; CI not required -> refund.
+    ///         Forfeits credit `treasury` and bump `totalProtocolRevenue[token]`.
     function settleStake(uint256 bountyId, address worker) external nonReentrant {
         Bounty storage b = _bounties[bountyId];
         BountyStatus status = b.status;
@@ -260,6 +386,7 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         if (s.stakeRefunded) revert StakeAlreadySettled();
         s.stakeRefunded = true;
 
+        address t = b.token;
         bool refund;
         if (status == BountyStatus.Resolved && worker == b.winner) {
             refund = true;
@@ -272,24 +399,25 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         }
 
         if (refund) {
-            earnings[worker] += stake;
+            earnings[worker][t] += stake;
             emit StakeRefunded(bountyId, worker, stake);
         } else {
-            earnings[treasury] += stake;
-            uint256 newRevenue = totalProtocolRevenue + stake;
-            totalProtocolRevenue = newRevenue;
+            earnings[treasury][t] += stake;
+            uint256 newRevenue = totalProtocolRevenue[t] + stake;
+            totalProtocolRevenue[t] = newRevenue;
             emit StakeForfeited(bountyId, worker, stake);
-            emit ProtocolRevenueAccrued(stake, newRevenue);
+            emit ProtocolRevenueAccrued(t, stake, newRevenue);
         }
     }
 
     /// @notice Always callable, even when paused, so users can always exit.
-    function withdrawEarnings() external nonReentrant {
-        uint256 amount = earnings[msg.sender];
+    function withdrawEarnings(IERC20 token) external nonReentrant {
+        address t = address(token);
+        uint256 amount = earnings[msg.sender][t];
         if (amount == 0) revert NothingToWithdraw();
-        earnings[msg.sender] = 0;
-        emit EarningsWithdrawn(msg.sender, amount);
-        cUSD.safeTransfer(msg.sender, amount);
+        earnings[msg.sender][t] = 0;
+        emit EarningsWithdrawn(msg.sender, t, amount);
+        token.safeTransfer(msg.sender, amount);
     }
 
     function getBounty(uint256 bountyId) external view returns (Bounty memory) {
@@ -316,25 +444,33 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
             Submission storage s = _submissions[bountyId][worker];
             if (s.submittedAt != 0 && (!b.ciRequired || s.ciPassed)) {
                 buffer[count] = worker;
-                unchecked { ++count; }
+                unchecked {
+                    ++count;
+                }
             }
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         eligible = new address[](count);
         for (uint256 i = 0; i < count;) {
             eligible[i] = buffer[i];
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
-    function getStats()
+    /// @notice Per-token marketplace stats. `resolved`, `posters`, `workers` are global.
+    function getStats(IERC20 token)
         external
         view
         returns (uint256 volume, uint256 revenue, uint256 resolved, uint256 posters, uint256 workers)
     {
+        address t = address(token);
         return
-            (totalBountyVolume, totalProtocolRevenue, totalBountiesResolved, uniquePosterCount, uniqueWorkerCount);
+            (totalBountyVolume[t], totalProtocolRevenue[t], totalBountiesResolved, uniquePosterCount, uniqueWorkerCount);
     }
 
     function proposeCIRelayer(address newRelayer) external onlyOwner {
@@ -395,9 +531,10 @@ contract ClaudelanceCore is IClaudelanceCore, ReentrancyGuard, Ownable2Step, Pau
         _unpause();
     }
 
-    /// @notice cUSD excluded — it is held legitimately for bounties / stakes / earnings.
+    /// @notice Rescue accidentally-sent ERC20s. Blocks any whitelisted token —
+    ///         their balance is held legitimately as bounty / stake / earnings.
     function rescueERC20(IERC20 token, address to, uint256 amount) external onlyOwner {
-        if (address(token) == address(cUSD)) revert CannotRescueCUSD();
+        if (allowedToken[address(token)]) revert CannotRescueEscrowToken();
         if (to == address(0)) revert InvalidAddress();
         emit ERC20Rescued(address(token), to, amount);
         token.safeTransfer(to, amount);

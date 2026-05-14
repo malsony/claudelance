@@ -1,42 +1,49 @@
 import type { Bounty } from '@yeheskieltame/claudelance-types';
-import { CUSD_DECIMALS } from './constants.js';
 
 /**
- * Convert a cUSD wei amount (bigint, 18 decimals) to a plain number for
- * UI / log lines. Precision is lossy beyond ~15 decimal digits — fine
- * for human display, NEVER use the result for math that affects on-chain
- * state.
+ * Convert a token wei amount (bigint) to a plain number for UI / log lines.
+ * Precision is lossy beyond ~15 decimal digits — fine for human display,
+ * NEVER use the result for math that affects on-chain state.
  */
-export function cusdToFloat(wei: bigint): number {
-  return Number(wei) / 10 ** CUSD_DECIMALS;
+export function tokenToFloat(wei: bigint, decimals = 18): number {
+  return Number(wei) / 10 ** decimals;
 }
 
 /**
- * Convert a human-readable cUSD amount (float) to wei (bigint).
+ * Convert a human-readable amount (float) to wei (bigint).
  *
  * Rounds at the wei boundary. Caller is responsible for sanity-checking
- * the result against the contract's `MIN_BOUNTY_WEI` / per-tier rules.
+ * the result against the contract's per-token `minBounty`.
  */
-export function floatToCusd(amount: number): bigint {
+export function floatToToken(amount: number, decimals = 18): bigint {
   if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error(`[floatToCusd] amount must be a non-negative finite number, got ${amount}`);
+    throw new Error(`[floatToToken] amount must be a non-negative finite number, got ${amount}`);
   }
-  return BigInt(Math.round(amount * 10 ** CUSD_DECIMALS));
+  return BigInt(Math.round(amount * 10 ** decimals));
 }
 
 /**
- * Pretty-print a cUSD wei amount with a fixed number of decimals.
+ * Pretty-print a token amount with symbol + decimals.
  *
- *   cusdFormat(2_060_000_000_000_000_000n)        -> "2.06 cUSD"
- *   cusdFormat(123_456_789_000_000_000n, 4)       -> "0.1235 cUSD"
+ *   tokenFormat(2_060_000_000_000_000_000n, 'cUSD')        -> "2.06 cUSD"
+ *   tokenFormat(123_456_789n, 'USDC', { decimals: 6 })     -> "123.46 USDC"
  */
-export function cusdFormat(wei: bigint, decimals = 2): string {
-  return `${cusdToFloat(wei).toFixed(decimals)} cUSD`;
+export function tokenFormat(
+  wei: bigint,
+  symbol: string,
+  opts: { decimals?: number; places?: number } = {}
+): string {
+  const { decimals = 18, places = 2 } = opts;
+  return `${tokenToFloat(wei, decimals).toFixed(places)} ${symbol}`;
 }
 
+/** Back-compat: convenience wrappers for the cUSD case (18 decimals). */
+export const cusdToFloat = (wei: bigint): number => tokenToFloat(wei, 18);
+export const floatToCusd = (amount: number): bigint => floatToToken(amount, 18);
+export const cusdFormat = (wei: bigint, places = 2): string => tokenFormat(wei, 'cUSD', { places });
+
 /**
- * Seconds until a bounty's deadline, given the current wall clock. Can
- * be negative if the deadline has already passed.
+ * Seconds until a bounty's deadline. Can be negative if already passed.
  */
 export function timeRemaining(bounty: Bounty, nowSeconds?: number): number {
   const now = nowSeconds ?? Math.floor(Date.now() / 1000);
@@ -44,22 +51,27 @@ export function timeRemaining(bounty: Bounty, nowSeconds?: number): number {
 }
 
 /**
- * One-line, agent-friendly summary of a bounty for log lines + LLM
- * prompts. Example:
- *
- *   "Bounty #42 OPEN | 2.50 cUSD | 3/5 slots | 2d 4h left | CI required
- *    | repo: github.com/foo/bar"
+ * One-line, agent-friendly summary of a bounty for log lines + LLM prompts.
+ * The token amount is rendered in token's smallest unit if a symbol/decimals
+ * are not provided (sane default: assume 18 decimals).
  */
-export function formatBountySummary(bounty: Bounty & { id: bigint }): string {
+export function formatBountySummary(
+  bounty: Bounty & { id: bigint },
+  opts: { tokenSymbol?: string; tokenDecimals?: number } = {}
+): string {
+  const { tokenSymbol = 'token', tokenDecimals = 18 } = opts;
   const statusLabel = ['OPEN', 'RESOLVED', 'CANCELLED', 'EXPIRED'][bounty.status] ?? '?';
   const remaining = timeRemaining(bounty);
   const days = Math.max(0, Math.floor(remaining / 86_400));
   const hours = Math.max(0, Math.floor((remaining % 86_400) / 3600));
   const left = remaining <= 0 ? 'EXPIRED' : `${days}d ${hours}h left`;
   const ci = bounty.ciRequired ? 'CI required' : 'no CI';
+  const ZERO = '0x0000000000000000000000000000000000000000';
+  const mode = bounty.targetWorker.toLowerCase() === ZERO ? 'OPEN' : `DIRECT->${bounty.targetWorker.slice(0, 8)}`;
   return [
     `Bounty #${bounty.id} ${statusLabel}`,
-    cusdFormat(bounty.amount),
+    mode,
+    tokenFormat(bounty.amount, tokenSymbol, { decimals: tokenDecimals }),
     `${bounty.claimedSlots}/${bounty.maxSlots} slots`,
     left,
     ci,

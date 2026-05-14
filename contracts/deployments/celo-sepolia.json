@@ -1,51 +1,15 @@
 {
   "chainId": 11142220,
-  "chainName": "celo-sepolia",
-  "core": "0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8",
-  "cUSD": "0x207D662337694796E76a4d5577DC72C93Cd92822",
-  "cUSDKind": "MockCUSD (testnet stand-in; canonical cUSD does not exist on Celo Sepolia)",
+  "core": "0xC478e36CC213Cb459282b5B690bF8FF4975A911F",
+  "tokens": {
+    "cUSD": "0xeB9595f4d14A4AEB23cc535007c973e50F1307E7",
+    "CELO": "0x68128f321E01C2388628c549E3a4Ea016DB01968",
+    "USDC": "0x71f44190dCE495b663700A3e96909988b8fbF3F9"
+  },
+  "identityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  "reputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
   "treasury": "0x987e2ed458ddAF6f900362F94558378056dCc226",
   "ciRelayer": "0x987e2ed458ddAF6f900362F94558378056dCc226",
   "owner": "0x987e2ed458ddAF6f900362F94558378056dCc226",
-  "deployer": "0x987e2ed458ddAF6f900362F94558378056dCc226",
-  "deployedAt": 1778731892,
-  "predecessor": {
-    "core": "0x8223cB87CfAAB9c1a5e524545C3097df1517191D",
-    "note": "Replaced 2026-05-14 with hardened contract after PR-9/10/11. Old deployment runs the pre-Ownable2Step ABI."
-  },
-  "verification": {
-    "verifier": "Etherscan API V2",
-    "compiler": "v0.8.24+commit.e11b9ed9",
-    "optimizer": { "enabled": true, "runs": 200 },
-    "viaIR": true
-  },
-  "explorer": {
-    "core": {
-      "blockscout": "https://celo-sepolia.blockscout.com/address/0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8",
-      "celoscan": "https://sepolia.celoscan.io/address/0xa2cae817311bbf725a7eaa45ad533b89396dffd8#code"
-    },
-    "cUSD": {
-      "blockscout": "https://celo-sepolia.blockscout.com/address/0x207D662337694796E76a4d5577DC72C93Cd92822",
-      "celoscan": "https://sepolia.celoscan.io/address/0x207d662337694796e76a4d5577dc72c93cd92822#code"
-    }
-  },
-  "liveState": {
-    "capturedAt": 1778735200,
-    "bountyCount": 2,
-    "totalBountyVolume": "2000000000000000000",
-    "totalProtocolRevenue": "90000000000000000",
-    "totalBountiesResolved": 2,
-    "uniqueWorkerCount": 2,
-    "uniquePosterCount": 1,
-    "broadcasts": [
-      {
-        "script": "Deploy.s.sol",
-        "result": "ClaudelanceCore (PR-11 bytecode) deployed at 0xA2cAe8…dFfd8; verified on Celoscan"
-      },
-      {
-        "script": "IntegrationFullFlow.s.sol",
-        "result": "27 tx end-to-end: 2 bounties resolved (1 happy-path refund + 1 forfeit), settleStake permissionless pull pattern verified, propose/cancel treasury cycle, w1 withdrew 2.06 cUSD. totalProtocolRevenue = 0.09 cUSD (= 2 × 0.02 fee + 0.05 forfeit)."
-      }
-    ]
-  }
+  "deployedAt": 1778777311
 }

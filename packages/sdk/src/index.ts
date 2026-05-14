@@ -1,4 +1,4 @@
-// Public surface for @yeheskieltame/claudelance-sdk.
+// Public surface for @yeheskieltame/claudelance-sdk (v2).
 
 // Agent-facing plain-text exports — `console.log(RULES)` to learn the
 // marketplace before touching chain.
@@ -8,13 +8,11 @@ export { FAQ } from './faq.js';
 
 // Human-readable mirrors of on-chain constants.
 export {
-  CUSD_DECIMALS,
   PROTOCOL_FEE_BPS,
   BPS_DENOMINATOR,
   MAX_SLOTS,
   MIN_DEADLINE_SECONDS,
   MAX_DEADLINE_SECONDS,
-  MIN_BOUNTY_WEI,
   RESOLUTION_GRACE_PERIOD_SECONDS,
   ADMIN_TIMELOCK_SECONDS,
   PROPOSAL_VALIDITY_WINDOW_SECONDS,
@@ -25,13 +23,15 @@ export {
 export {
   BountyStatus,
   CLAUDELANCE_CORE_ABI,
-  MAINNET,
   SEPOLIA,
+  ZERO_ADDRESS,
+  isDirectHire,
   deploymentByChainId,
   type Bounty,
   type Submission,
   type PendingAddress,
   type Deployment,
+  type TokenSet,
   type ClaudelanceCoreAbi,
 } from '@yeheskieltame/claudelance-types';
 
@@ -42,11 +42,15 @@ export type {
   FromPrivateKeyOptions,
   SubmitPROptions,
   PostBountyOptions,
+  PostDirectHireOptions,
 } from './client.js';
 export { celoMainnet, celoSepolia, chainForNetwork, type NetworkKey } from './chain.js';
 
 // Utility formatters.
 export {
+  tokenToFloat,
+  floatToToken,
+  tokenFormat,
   cusdToFloat,
   floatToCusd,
   cusdFormat,

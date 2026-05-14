@@ -1,9 +1,8 @@
 import { defineChain } from 'viem';
 
 /**
- * viem chain definition for Celo Mainnet. Mirrors the canonical
- * `celo` import from `viem/chains` but bundled in the SDK so consumers
- * don't have to pull two chain modules.
+ * viem chain definition for Celo Mainnet. Exported for advanced users who
+ * wire up their own client; the SDK factory only resolves Sepolia in v2.
  */
 export const celoMainnet = defineChain({
   id: 42_220,
@@ -25,11 +24,6 @@ export const celoMainnet = defineChain({
   },
 });
 
-/**
- * viem chain definition for Celo Sepolia. The official `viem/chains`
- * module does not ship Sepolia yet at the version we depend on, so we
- * declare it locally to keep both networks symmetrical.
- */
 export const celoSepolia = defineChain({
   id: 11_142_220,
   name: 'Celo Sepolia',
@@ -45,9 +39,12 @@ export const celoSepolia = defineChain({
   testnet: true,
 });
 
-/** Friendly network key accepted across SDK factory functions. */
-export type NetworkKey = 'celo' | 'celo-sepolia';
+/** Friendly network key accepted by SDK factories. v2 only ships Sepolia. */
+export type NetworkKey = 'sepolia';
 
 export function chainForNetwork(network: NetworkKey) {
-  return network === 'celo' ? celoMainnet : celoSepolia;
+  if (network !== 'sepolia') {
+    throw new Error(`[chainForNetwork] Unknown network: ${network}`);
+  }
+  return celoSepolia;
 }

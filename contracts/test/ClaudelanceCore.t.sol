@@ -5,18 +5,22 @@ import { Test } from "forge-std/Test.sol";
 import { ClaudelanceCore } from "../src/ClaudelanceCore.sol";
 import { IClaudelanceCore } from "../src/interfaces/IClaudelanceCore.sol";
 import { MockCUSD } from "../src/mocks/MockCUSD.sol";
+import { MockIdentityRegistry } from "../src/mocks/MockIdentityRegistry.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract ClaudelanceCoreTest is Test {
     ClaudelanceCore internal core;
     MockCUSD internal cusd;
+    MockCUSD internal usdc;
+    MockIdentityRegistry internal identity;
 
     address internal owner = makeAddr("owner");
     address internal treasury = makeAddr("treasury");
     address internal relayer = makeAddr("relayer");
+    address internal reputationRegistry = makeAddr("reputationRegistry");
     address internal poster = makeAddr("poster");
     address internal w1 = makeAddr("w1");
     address internal w2 = makeAddr("w2");
@@ -25,12 +29,26 @@ contract ClaudelanceCoreTest is Test {
 
     uint96 internal constant AMOUNT = 5e18;
     uint96 internal constant STAKE = 0.25e18;
+    uint96 internal constant MIN_BOUNTY = 0.5e18;
     uint8 internal constant MAX_SLOTS = 5;
     uint64 internal constant DEADLINE = 2 days;
 
     function setUp() public {
         cusd = new MockCUSD();
-        core = new ClaudelanceCore(IERC20(address(cusd)), treasury, relayer, owner);
+        usdc = new MockCUSD();
+        identity = new MockIdentityRegistry();
+
+        core = new ClaudelanceCore(treasury, relayer, owner, IERC721(address(identity)), reputationRegistry);
+
+        vm.startPrank(owner);
+        core.allowToken(IERC20(address(cusd)), MIN_BOUNTY);
+        core.allowToken(IERC20(address(usdc)), MIN_BOUNTY);
+        vm.stopPrank();
+
+        // Register agent identities for the canonical workers.
+        identity.register(w1);
+        identity.register(w2);
+        identity.register(w3);
 
         cusd.mint(poster, 100e18);
         cusd.mint(w1, 10e18);
@@ -47,9 +65,14 @@ contract ClaudelanceCoreTest is Test {
         cusd.approve(address(core), type(uint256).max);
     }
 
+    function _cusd() internal view returns (IERC20) {
+        return IERC20(address(cusd));
+    }
+
     function _post() internal returns (uint256) {
         vm.prank(poster);
         return core.postBounty(
+            _cusd(),
             0,
             "github.com/employer/repo",
             "github.com/employer/repo/issues/1",
@@ -78,19 +101,20 @@ contract ClaudelanceCoreTest is Test {
     }
 
     function _withdraw(address who) internal returns (uint256 paid) {
-        paid = core.earnings(who);
+        paid = core.earnings(who, address(cusd));
         vm.prank(who);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
     }
 
-    /// @dev Sweep stakes for every claimer of `id`. Anyone can call `settleStake`,
-    ///      so the test driver does it after resolution to mirror what a relayer
-    ///      bot or the workers themselves would do in production.
     function _settleAll(uint256 id) internal {
         address[] memory claimers = core.getClaimers(id);
         for (uint256 i = 0; i < claimers.length; i++) {
             core.settleStake(id, claimers[i]);
         }
+    }
+
+    function _earnings(address who) internal view returns (uint256) {
+        return core.earnings(who, address(cusd));
     }
 
     function test_PostBounty_TransfersDepositAndEmits() public {
@@ -102,9 +126,10 @@ contract ClaudelanceCoreTest is Test {
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(b.poster, poster);
         assertEq(b.amount, AMOUNT);
+        assertEq(b.token, address(cusd));
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Open));
         assertEq(core.bountyCountByType(0), 1);
-        assertEq(core.totalBountyVolume(), AMOUNT);
+        assertEq(core.totalBountyVolume(address(cusd)), AMOUNT);
         assertEq(core.uniquePosterCount(), 1);
     }
 
@@ -114,33 +139,58 @@ contract ClaudelanceCoreTest is Test {
         vm.expectRevert();
         vm.prank(poster);
         core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true
+            _cusd(), 0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true
         );
     }
 
     function test_PostBounty_RevertsOnInvalidParams() public {
         vm.startPrank(poster);
         vm.expectRevert(ClaudelanceCore.InvalidAmount.selector);
-        core.postBounty(0, "x", "x", bytes32(0), 0.1e18, MAX_SLOTS, STAKE, DEADLINE, true);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), 0.1e18, MAX_SLOTS, STAKE, DEADLINE, true);
+
+        vm.expectRevert(ClaudelanceCore.InvalidStake.selector);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, 0, DEADLINE, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidSlots.selector);
-        core.postBounty(0, "x", "x", bytes32(0), AMOUNT, 0, STAKE, DEADLINE, true);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), AMOUNT, 0, STAKE, DEADLINE, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidSlots.selector);
-        core.postBounty(0, "x", "x", bytes32(0), AMOUNT, 21, STAKE, DEADLINE, true);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), AMOUNT, 21, STAKE, DEADLINE, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidDeadline.selector);
-        core.postBounty(0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, 1 hours, true);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, 1 hours, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidDeadline.selector);
-        core.postBounty(0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, 30 days, true);
+        core.postBounty(_cusd(), 0, "x", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, 30 days, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
-        core.postBounty(0, "", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
+        core.postBounty(_cusd(), 0, "", "x", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
 
         vm.expectRevert(ClaudelanceCore.InvalidUrl.selector);
-        core.postBounty(0, "x", "", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
+        core.postBounty(_cusd(), 0, "x", "", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true);
         vm.stopPrank();
+    }
+
+    function test_PostBounty_RevertsOnNotAllowedToken() public {
+        MockCUSD random = new MockCUSD();
+        random.mint(poster, AMOUNT);
+        vm.prank(poster);
+        random.approve(address(core), type(uint256).max);
+
+        vm.expectRevert(ClaudelanceCore.TokenNotAllowed.selector);
+        vm.prank(poster);
+        core.postBounty(
+            IERC20(address(random)),
+            0,
+            "x",
+            "x",
+            bytes32(0),
+            AMOUNT,
+            MAX_SLOTS,
+            STAKE,
+            DEADLINE,
+            true
+        );
     }
 
     function test_ClaimSlot_LocksStakeAndIncrements() public {
@@ -154,16 +204,30 @@ contract ClaudelanceCoreTest is Test {
         assertEq(core.uniqueWorkerCount(), 1);
     }
 
+    function test_ClaimSlot_RevertsWithoutAgentIdentity() public {
+        uint256 id = _post();
+        address noId = makeAddr("noIdentity");
+        cusd.mint(noId, STAKE);
+        vm.prank(noId);
+        cusd.approve(address(core), STAKE);
+
+        vm.expectRevert(ClaudelanceCore.NoAgentIdentity.selector);
+        vm.prank(noId);
+        core.claimSlot(id);
+    }
+
     function test_ClaimSlot_RevertsWhenSlotsFull() public {
         uint256 id = _post();
         address[5] memory workers = [w1, w2, w3, makeAddr("w4"), makeAddr("w5")];
         for (uint256 i = 0; i < workers.length; i++) {
+            identity.register(workers[i]);
             cusd.mint(workers[i], STAKE);
             vm.prank(workers[i]);
             cusd.approve(address(core), STAKE);
             _claim(id, workers[i]);
         }
         address w6 = makeAddr("w6");
+        identity.register(w6);
         cusd.mint(w6, STAKE);
         vm.prank(w6);
         cusd.approve(address(core), STAKE);
@@ -283,17 +347,15 @@ contract ClaudelanceCoreTest is Test {
         uint96 expectedFee = uint96((uint256(AMOUNT) * 200) / 10_000);
         uint96 expectedPayout = AMOUNT - expectedFee;
 
-        // pickWinner is O(1) — only winner payout + fee are credited atomically.
-        assertEq(core.earnings(treasury), expectedFee, "treasury fee credited via earnings");
-        assertEq(core.earnings(w1), uint256(expectedPayout), "winner payout only; stake pending settleStake");
-        assertEq(core.earnings(w2), 0, "loser stake pending settleStake");
+        assertEq(_earnings(treasury), expectedFee, "treasury fee credited via earnings");
+        assertEq(_earnings(w1), uint256(expectedPayout), "winner payout only; stake pending settleStake");
+        assertEq(_earnings(w2), 0, "loser stake pending settleStake");
 
-        // Now settle stakes (anyone can call; we do it on behalf of both claimers).
         _settleAll(id);
-        assertEq(core.earnings(w1), uint256(expectedPayout) + STAKE, "winner stake refunded");
-        assertEq(core.earnings(w2), STAKE, "good-faith loser stake refunded");
+        assertEq(_earnings(w1), uint256(expectedPayout) + STAKE, "winner stake refunded");
+        assertEq(_earnings(w2), STAKE, "good-faith loser stake refunded");
 
-        assertEq(core.totalProtocolRevenue(), expectedFee);
+        assertEq(core.totalProtocolRevenue(address(cusd)), expectedFee);
         assertEq(core.totalBountiesResolved(), 1);
 
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
@@ -354,16 +416,25 @@ contract ClaudelanceCoreTest is Test {
         _settleAll(id);
 
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
-        assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE);
-        assertEq(core.earnings(w2), STAKE);
-        assertEq(core.earnings(w3), 0);
-        assertEq(core.earnings(treasury), fee + STAKE);
+        assertEq(_earnings(w1), uint256(AMOUNT - fee) + STAKE);
+        assertEq(_earnings(w2), STAKE);
+        assertEq(_earnings(w3), 0);
+        assertEq(_earnings(treasury), fee + STAKE);
     }
 
-    function test_PickWinner_NoStakeNoForfeit() public {
+    function test_PickWinner_SingleSubmitterNoCI() public {
         vm.prank(poster);
         uint256 id = core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, 0, DEADLINE, false
+            _cusd(),
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/1",
+            bytes32(0),
+            AMOUNT,
+            MAX_SLOTS,
+            STAKE,
+            DEADLINE,
+            false
         );
         _claim(id, w1);
         vm.prank(w1);
@@ -377,11 +448,18 @@ contract ClaudelanceCoreTest is Test {
     }
 
     function test_PickWinner_NoCI_RefundsLosersWithSubmission() public {
-        // ciRequired=false branch in settleStake: any submitter (winner or not) gets stake back,
-        // non-submitters forfeit. Covers the `refund = true` fallthrough.
         vm.prank(poster);
         uint256 id = core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, false
+            _cusd(),
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/1",
+            bytes32(0),
+            AMOUNT,
+            MAX_SLOTS,
+            STAKE,
+            DEADLINE,
+            false
         );
         _claim(id, w1);
         _claim(id, w2);
@@ -390,17 +468,16 @@ contract ClaudelanceCoreTest is Test {
         core.submitPR(id, "github.com/x/y/pull/1", bytes32(uint256(0x1)), "");
         vm.prank(w2);
         core.submitPR(id, "github.com/x/y/pull/2", bytes32(uint256(0x2)), "");
-        // w3 never submits -> stake forfeited
 
         vm.prank(poster);
         core.pickWinner(id, w1);
         _settleAll(id);
 
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
-        assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE, "winner gets payout + own stake");
-        assertEq(core.earnings(w2), STAKE, "non-winner submitter gets stake back (no-CI)");
-        assertEq(core.earnings(w3), 0, "non-submitter forfeits");
-        assertEq(core.earnings(treasury), fee + STAKE, "treasury gets fee + w3 forfeit");
+        assertEq(_earnings(w1), uint256(AMOUNT - fee) + STAKE);
+        assertEq(_earnings(w2), STAKE);
+        assertEq(_earnings(w3), 0);
+        assertEq(_earnings(treasury), fee + STAKE);
     }
 
     function test_WithdrawEarnings_PaysAndClears() public {
@@ -411,16 +488,16 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(poster);
         core.pickWinner(id, w1);
 
-        uint256 expected = core.earnings(w1);
+        uint256 expected = _earnings(w1);
         uint256 before = cusd.balanceOf(w1);
         vm.prank(w1);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
         assertEq(cusd.balanceOf(w1), before + expected);
-        assertEq(core.earnings(w1), 0);
+        assertEq(_earnings(w1), 0);
 
         vm.expectRevert(ClaudelanceCore.NothingToWithdraw.selector);
         vm.prank(w1);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
     }
 
     function test_WithdrawEarnings_AllowedWhilePaused() public {
@@ -434,10 +511,10 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(owner);
         core.pause();
 
-        uint256 owed = core.earnings(w1);
+        uint256 owed = _earnings(w1);
         uint256 before = cusd.balanceOf(w1);
         vm.prank(w1);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
         assertEq(cusd.balanceOf(w1), before + owed, "earnings must still be withdrawable when paused");
     }
 
@@ -456,17 +533,17 @@ contract ClaudelanceCoreTest is Test {
         core.cancelExpired(id);
         _settleAll(id);
 
-        assertEq(core.earnings(poster), AMOUNT, "poster refund credited");
-        assertEq(core.earnings(w1), STAKE);
-        assertEq(core.earnings(w2), 0);
-        assertEq(core.earnings(treasury), STAKE, "w2 stake forfeited (never submitted)");
+        assertEq(_earnings(poster), AMOUNT, "poster refund credited");
+        assertEq(_earnings(w1), STAKE);
+        assertEq(_earnings(w2), 0);
+        assertEq(_earnings(treasury), STAKE, "w2 stake forfeited (never submitted)");
 
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Cancelled));
 
         uint256 posterBefore = cusd.balanceOf(poster);
         vm.prank(poster);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
         assertEq(cusd.balanceOf(poster), posterBefore + AMOUNT);
     }
 
@@ -482,7 +559,16 @@ contract ClaudelanceCoreTest is Test {
         vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(poster);
         core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true
+            _cusd(),
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/1",
+            bytes32(0),
+            AMOUNT,
+            MAX_SLOTS,
+            STAKE,
+            DEADLINE,
+            true
         );
 
         vm.expectRevert(Pausable.EnforcedPause.selector);
@@ -515,6 +601,14 @@ contract ClaudelanceCoreTest is Test {
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
         core.cancelPendingCIRelayer();
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.allowToken(_cusd(), 1);
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.setMinBounty(_cusd(), 1);
     }
 
     function test_Stats_IncrementsCorrectly() public {
@@ -525,7 +619,7 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(poster);
         core.pickWinner(id, w1);
 
-        (uint256 vol, uint256 rev, uint256 res, uint256 posters, uint256 workers) = core.getStats();
+        (uint256 vol, uint256 rev, uint256 res, uint256 posters, uint256 workers) = core.getStats(_cusd());
         assertEq(vol, AMOUNT);
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
         assertEq(rev, fee);
@@ -564,7 +658,7 @@ contract ClaudelanceCoreTest is Test {
     function test_BountyTypeAcceptsAnyUint8() public {
         vm.prank(poster);
         uint256 id = core.postBounty(
-            7, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, 1, 0, DEADLINE, false
+            _cusd(), 7, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, 1, STAKE, DEADLINE, false
         );
         assertEq(core.bountyCountByType(7), 1);
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
@@ -631,7 +725,7 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(poster);
         core.cancelExpired(id);
 
-        assertEq(core.earnings(poster), AMOUNT);
+        assertEq(_earnings(poster), AMOUNT);
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Cancelled));
     }
@@ -648,8 +742,8 @@ contract ClaudelanceCoreTest is Test {
         core.cancelExpired(id);
         core.settleStake(id, w1);
 
-        assertEq(core.earnings(poster), AMOUNT);
-        assertEq(core.earnings(w1), STAKE);
+        assertEq(_earnings(poster), AMOUNT);
+        assertEq(_earnings(w1), STAKE);
     }
 
     function test_CancelExpired_GraceProtectsWinnerFromGriefRace() public {
@@ -669,7 +763,7 @@ contract ClaudelanceCoreTest is Test {
         core.settleStake(id, w1);
 
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
-        assertEq(core.earnings(w1), uint256(AMOUNT - fee) + STAKE);
+        assertEq(_earnings(w1), uint256(AMOUNT - fee) + STAKE);
         IClaudelanceCore.Bounty memory b = core.getBounty(id);
         assertEq(uint8(b.status), uint8(IClaudelanceCore.BountyStatus.Resolved));
     }
@@ -679,21 +773,19 @@ contract ClaudelanceCoreTest is Test {
         emit IClaudelanceCore.TreasuryUpdated(address(0), treasury);
         vm.expectEmit(true, true, false, false);
         emit IClaudelanceCore.CIRelayerUpdated(address(0), relayer);
-        new ClaudelanceCore(IERC20(address(cusd)), treasury, relayer, owner);
+        new ClaudelanceCore(treasury, relayer, owner, IERC721(address(identity)), reputationRegistry);
     }
 
     function test_Constructor_RevertsOnZeroAddresses() public {
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        new ClaudelanceCore(IERC20(address(0)), treasury, relayer, owner);
+        new ClaudelanceCore(address(0), relayer, owner, IERC721(address(identity)), reputationRegistry);
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        new ClaudelanceCore(IERC20(address(cusd)), address(0), relayer, owner);
+        new ClaudelanceCore(treasury, address(0), owner, IERC721(address(identity)), reputationRegistry);
         vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
-        new ClaudelanceCore(IERC20(address(cusd)), treasury, address(0), owner);
+        new ClaudelanceCore(treasury, relayer, owner, IERC721(address(0)), reputationRegistry);
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        new ClaudelanceCore(treasury, relayer, owner, IERC721(address(identity)), address(0));
     }
-
-    // ---------------------------------------------------------------- //
-    //                    Timelock: treasury & relayer                  //
-    // ---------------------------------------------------------------- //
 
     function test_ProposeTreasury_StoresPending() public {
         address newT = makeAddr("newT");
@@ -803,7 +895,6 @@ contract ClaudelanceCoreTest is Test {
         core.applyCIRelayer();
         assertEq(core.ciRelayer(), newR);
 
-        // old relayer no longer authorized
         uint256 id = _post();
         _claim(id, w1);
         _submit(id, w1);
@@ -841,10 +932,6 @@ contract ClaudelanceCoreTest is Test {
         core.cancelPendingCIRelayer();
     }
 
-    // ---------------------------------------------------------------- //
-    //                         Ownable2Step                             //
-    // ---------------------------------------------------------------- //
-
     function test_Ownable2Step_RequiresAccept() public {
         address newOwner = makeAddr("newOwner");
         vm.prank(owner);
@@ -852,7 +939,6 @@ contract ClaudelanceCoreTest is Test {
         assertEq(core.owner(), owner, "owner stays until acceptOwnership");
         assertEq(core.pendingOwner(), newOwner);
 
-        // wrong account cannot accept
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
         vm.prank(stranger);
         core.acceptOwnership();
@@ -862,10 +948,6 @@ contract ClaudelanceCoreTest is Test {
         assertEq(core.owner(), newOwner);
         assertEq(core.pendingOwner(), address(0));
     }
-
-    // ---------------------------------------------------------------- //
-    //                          rescueERC20                             //
-    // ---------------------------------------------------------------- //
 
     function test_RescueERC20_TransfersStrayTokenAndEmits() public {
         MockCUSD other = new MockCUSD();
@@ -882,10 +964,10 @@ contract ClaudelanceCoreTest is Test {
         assertEq(other.balanceOf(address(core)), 0);
     }
 
-    function test_RescueERC20_RejectsCUSD() public {
+    function test_RescueERC20_RejectsAllowedToken() public {
         vm.prank(owner);
-        vm.expectRevert(ClaudelanceCore.CannotRescueCUSD.selector);
-        core.rescueERC20(IERC20(address(cusd)), owner, 1);
+        vm.expectRevert(ClaudelanceCore.CannotRescueEscrowToken.selector);
+        core.rescueERC20(_cusd(), owner, 1);
     }
 
     function test_RescueERC20_RejectsZeroRecipient() public {
@@ -904,19 +986,34 @@ contract ClaudelanceCoreTest is Test {
         core.rescueERC20(IERC20(address(other)), stranger, 1);
     }
 
-    // ---------------------------------------------------------------- //
-    //                            Events                                //
-    // ---------------------------------------------------------------- //
-
     function test_Events_PostBountyEmitsExpectedFields() public {
         bytes32 reqHash = keccak256("hash");
-        vm.expectEmit(true, true, false, true);
-        emit IClaudelanceCore.BountyPosted(1, poster, 0, AMOUNT, MAX_SLOTS, "github.com/employer/repo", reqHash);
+        vm.expectEmit(true, true, true, true);
+        emit IClaudelanceCore.BountyPosted(
+            1,
+            poster,
+            address(cusd),
+            address(0),
+            0,
+            AMOUNT,
+            STAKE,
+            MAX_SLOTS,
+            "github.com/employer/repo",
+            reqHash
+        );
 
         vm.prank(poster);
         core.postBounty(
-            0, "github.com/employer/repo", "github.com/employer/repo/issues/1", reqHash,
-            AMOUNT, MAX_SLOTS, STAKE, DEADLINE, true
+            _cusd(),
+            0,
+            "github.com/employer/repo",
+            "github.com/employer/repo/issues/1",
+            reqHash,
+            AMOUNT,
+            MAX_SLOTS,
+            STAKE,
+            DEADLINE,
+            true
         );
     }
 
@@ -952,16 +1049,14 @@ contract ClaudelanceCoreTest is Test {
         uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
         uint96 payout = AMOUNT - fee;
 
-        // pickWinner is O(1): only revenue + resolution events fire.
-        vm.expectEmit(false, false, false, true);
-        emit IClaudelanceCore.ProtocolRevenueAccrued(fee, fee);
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.ProtocolRevenueAccrued(address(cusd), fee, fee);
         vm.expectEmit(true, true, false, true);
         emit IClaudelanceCore.BountyResolved(id, w1, payout, fee);
 
         vm.prank(poster);
         core.pickWinner(id, w1);
 
-        // Stake events fire on the separate settleStake call.
         vm.expectEmit(true, true, false, true);
         emit IClaudelanceCore.StakeRefunded(id, w1, STAKE);
         core.settleStake(id, w1);
@@ -986,21 +1081,6 @@ contract ClaudelanceCoreTest is Test {
         core.settleStake(id, stranger);
     }
 
-    function test_SettleStake_RevertsWhenNoStakeRequired() public {
-        vm.prank(poster);
-        uint256 id = core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, 1, 0, DEADLINE, false
-        );
-        _claim(id, w1);
-        vm.prank(w1);
-        core.submitPR(id, "github.com/x/y/pull/1", bytes32(0), "");
-        vm.prank(poster);
-        core.pickWinner(id, w1);
-
-        vm.expectRevert(ClaudelanceCore.NoStakeRequired.selector);
-        core.settleStake(id, w1);
-    }
-
     function test_SettleStake_DoubleSettleReverts() public {
         uint256 id = _post();
         _claim(id, w1);
@@ -1015,32 +1095,32 @@ contract ClaudelanceCoreTest is Test {
     }
 
     function test_SettleStake_PermissionlessCallerForForfeit() public {
-        // A non-claimer (stranger) can settle a forfeit on behalf of the protocol —
-        // important so treasury can sweep forfeits without owner action.
         uint256 id = _post();
         _claim(id, w1);
         _claim(id, w2);
         _submit(id, w1);
-        // w2 never submits -> forfeit
         _attest(id, w1, true);
         vm.prank(poster);
         core.pickWinner(id, w1);
 
         vm.prank(stranger);
         core.settleStake(id, w2);
-        assertEq(core.earnings(treasury), uint256(uint96((uint256(AMOUNT) * 200) / 10_000)) + STAKE);
+        assertEq(_earnings(treasury), uint256(uint96((uint256(AMOUNT) * 200) / 10_000)) + STAKE);
     }
 
     function testFuzz_PickWinner_FeeMathIsConsistent(uint96 amount) public {
-        amount = uint96(bound(uint256(amount), uint256(core.MIN_BOUNTY()), type(uint96).max));
+        amount = uint96(bound(uint256(amount), uint256(core.minBounty(address(cusd))), type(uint96).max - STAKE));
 
         cusd.mint(poster, amount);
+        cusd.mint(w1, STAKE);
         vm.prank(poster);
+        cusd.approve(address(core), type(uint256).max);
+        vm.prank(w1);
         cusd.approve(address(core), type(uint256).max);
 
         vm.prank(poster);
         uint256 id = core.postBounty(
-            0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), amount, 1, 0, DEADLINE, false
+            _cusd(), 0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), amount, 1, STAKE, DEADLINE, false
         );
         _claim(id, w1);
         vm.prank(w1);
@@ -1048,13 +1128,14 @@ contract ClaudelanceCoreTest is Test {
 
         vm.prank(poster);
         core.pickWinner(id, w1);
+        core.settleStake(id, w1);
 
         uint256 fee = (uint256(amount) * core.PROTOCOL_FEE_BPS()) / core.BPS_DENOMINATOR();
         uint256 payout = uint256(amount) - fee;
 
         assertEq(payout + fee, uint256(amount), "payout + fee must equal amount");
-        assertEq(core.earnings(treasury), fee, "treasury fee credited via earnings");
-        assertEq(core.earnings(w1), payout, "winner earnings = payout (no stake in this fuzz)");
+        assertEq(_earnings(treasury), fee, "treasury fee credited via earnings");
+        assertEq(_earnings(w1), payout + STAKE, "winner earnings = payout + stake refund");
     }
 
     function test_Events_WithdrawalAndCancelEmit() public {
@@ -1065,11 +1146,11 @@ contract ClaudelanceCoreTest is Test {
         vm.prank(poster);
         core.pickWinner(id, w1);
 
-        uint256 owed = core.earnings(w1);
-        vm.expectEmit(true, false, false, true);
-        emit IClaudelanceCore.EarningsWithdrawn(w1, owed);
+        uint256 owed = _earnings(w1);
+        vm.expectEmit(true, true, false, true);
+        emit IClaudelanceCore.EarningsWithdrawn(w1, address(cusd), owed);
         vm.prank(w1);
-        core.withdrawEarnings();
+        core.withdrawEarnings(_cusd());
 
         uint256 id2 = _post();
         vm.warp(block.timestamp + DEADLINE + 1);
@@ -1077,5 +1158,191 @@ contract ClaudelanceCoreTest is Test {
         emit IClaudelanceCore.BountyCancelled(id2, poster, AMOUNT);
         vm.prank(poster);
         core.cancelExpired(id2);
+    }
+
+    // ---------------------------------------------------------------- //
+    //                          Multi-token                             //
+    // ---------------------------------------------------------------- //
+
+    function test_AllowToken_OnlyOwnerAndOneWay() public {
+        MockCUSD newToken = new MockCUSD();
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger));
+        vm.prank(stranger);
+        core.allowToken(IERC20(address(newToken)), 1);
+
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.TokenAllowed(address(newToken), 1e18);
+        vm.prank(owner);
+        core.allowToken(IERC20(address(newToken)), 1e18);
+
+        assertTrue(core.allowedToken(address(newToken)));
+        assertEq(core.minBounty(address(newToken)), 1e18);
+
+        vm.expectRevert(ClaudelanceCore.TokenAlreadyAllowed.selector);
+        vm.prank(owner);
+        core.allowToken(IERC20(address(newToken)), 2e18);
+    }
+
+    function test_AllowToken_RejectsZero() public {
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        vm.prank(owner);
+        core.allowToken(IERC20(address(0)), 1e18);
+    }
+
+    function test_SetMinBounty_AdjustsFloor() public {
+        vm.expectEmit(true, false, false, true);
+        emit IClaudelanceCore.MinBountyUpdated(address(cusd), 2e18);
+        vm.prank(owner);
+        core.setMinBounty(_cusd(), 2e18);
+        assertEq(core.minBounty(address(cusd)), 2e18);
+    }
+
+    function test_SetMinBounty_RejectsUnallowed() public {
+        MockCUSD newToken = new MockCUSD();
+        vm.expectRevert(ClaudelanceCore.TokenNotAllowed.selector);
+        vm.prank(owner);
+        core.setMinBounty(IERC20(address(newToken)), 1e18);
+    }
+
+    // ---------------------------------------------------------------- //
+    //                         Direct hire                              //
+    // ---------------------------------------------------------------- //
+
+    function test_PostDirectHire_OnlyTargetCanClaim() public {
+        vm.prank(poster);
+        uint256 id = core.postDirectHire(
+            _cusd(),
+            w1,
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/1",
+            bytes32(0),
+            AMOUNT,
+            STAKE,
+            DEADLINE
+        );
+
+        IClaudelanceCore.Bounty memory b = core.getBounty(id);
+        assertEq(b.targetWorker, w1);
+        assertEq(b.maxSlots, 1, "direct hire forces maxSlots=1");
+        assertFalse(b.ciRequired, "direct hire forces ciRequired=false");
+
+        vm.expectRevert(ClaudelanceCore.NotTargetedWorker.selector);
+        vm.prank(w2);
+        core.claimSlot(id);
+
+        _claim(id, w1);
+        assertTrue(core.hasClaimed(id, w1));
+    }
+
+    function test_PostDirectHire_RevertsOnZeroTarget() public {
+        vm.expectRevert(ClaudelanceCore.InvalidAddress.selector);
+        vm.prank(poster);
+        core.postDirectHire(
+            _cusd(), address(0), 0, "x", "x", bytes32(0), AMOUNT, STAKE, DEADLINE
+        );
+    }
+
+    function test_PostDirectHire_RevertsOnZeroStake() public {
+        vm.expectRevert(ClaudelanceCore.InvalidStake.selector);
+        vm.prank(poster);
+        core.postDirectHire(_cusd(), w1, 0, "x", "x", bytes32(0), AMOUNT, 0, DEADLINE);
+    }
+
+    function test_PostDirectHire_EmitsTargetInEvent() public {
+        bytes32 reqHash = keccak256("dh");
+        vm.expectEmit(true, true, true, true);
+        emit IClaudelanceCore.BountyPosted(
+            1, poster, address(cusd), w1, 0, AMOUNT, STAKE, 1, "github.com/x/y", reqHash
+        );
+
+        vm.prank(poster);
+        core.postDirectHire(_cusd(), w1, 0, "github.com/x/y", "github.com/x/y/issues/1", reqHash, AMOUNT, STAKE, DEADLINE);
+    }
+
+    function test_PostDirectHire_E2EFlow() public {
+        vm.prank(poster);
+        uint256 id = core.postDirectHire(
+            _cusd(),
+            w1,
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/1",
+            bytes32(0),
+            AMOUNT,
+            STAKE,
+            DEADLINE
+        );
+        _claim(id, w1);
+        vm.prank(w1);
+        core.submitPR(id, "github.com/x/y/pull/1", bytes32(uint256(0x1)), "{}");
+
+        vm.prank(poster);
+        core.pickWinner(id, w1);
+        core.settleStake(id, w1);
+
+        uint96 fee = uint96((uint256(AMOUNT) * 200) / 10_000);
+        assertEq(_earnings(w1), uint256(AMOUNT - fee) + STAKE);
+        assertEq(_earnings(treasury), fee);
+    }
+
+    function test_PostBounty_RevertsOnZeroStake() public {
+        vm.expectRevert(ClaudelanceCore.InvalidStake.selector);
+        vm.prank(poster);
+        core.postBounty(
+            _cusd(), 0, "github.com/x/y", "github.com/x/y/issues/1", bytes32(0), AMOUNT, 1, 0, DEADLINE, false
+        );
+    }
+
+    function test_MultiToken_IsolatedAccounting() public {
+        usdc.mint(poster, 100e18);
+        usdc.mint(w1, 10e18);
+        vm.prank(poster);
+        usdc.approve(address(core), type(uint256).max);
+        vm.prank(w1);
+        usdc.approve(address(core), type(uint256).max);
+
+        uint256 cusdId = _post();
+        vm.prank(poster);
+        uint256 usdcId = core.postBounty(
+            IERC20(address(usdc)),
+            0,
+            "github.com/x/y",
+            "github.com/x/y/issues/2",
+            bytes32(0),
+            3e18,
+            1,
+            STAKE,
+            DEADLINE,
+            false
+        );
+
+        _claim(cusdId, w1);
+        _submit(cusdId, w1);
+        _attest(cusdId, w1, true);
+        vm.prank(poster);
+        core.pickWinner(cusdId, w1);
+
+        _claim(usdcId, w1);
+        vm.prank(w1);
+        core.submitPR(usdcId, "github.com/x/y/pull/2", bytes32(0), "");
+        vm.prank(poster);
+        core.pickWinner(usdcId, w1);
+
+        assertEq(core.totalBountyVolume(address(cusd)), AMOUNT);
+        assertEq(core.totalBountyVolume(address(usdc)), 3e18);
+        assertGt(core.totalProtocolRevenue(address(cusd)), 0);
+        assertGt(core.totalProtocolRevenue(address(usdc)), 0);
+        assertGt(core.earnings(w1, address(cusd)), 0);
+        assertGt(core.earnings(w1, address(usdc)), 0);
+
+        uint256 cusdBefore = cusd.balanceOf(w1);
+        uint256 usdcBefore = usdc.balanceOf(w1);
+        vm.prank(w1);
+        core.withdrawEarnings(_cusd());
+        vm.prank(w1);
+        core.withdrawEarnings(IERC20(address(usdc)));
+        assertGt(cusd.balanceOf(w1), cusdBefore);
+        assertGt(usdc.balanceOf(w1), usdcBefore);
     }
 }

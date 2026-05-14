@@ -13,13 +13,15 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import {
   CLAUDELANCE_CORE_ABI,
-  MAINNET,
   SEPOLIA,
   type Bounty,
+  type TokenSet,
 } from '@yeheskieltame/claudelance-types';
 
 import { chainForNetwork, type NetworkKey } from './chain.js';
 import { CUSD_ABI } from './cusd-abi.js';
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
 /** Inputs accepted by {@link ClaudelanceClient.fromPrivateKey}. */
 export type FromPrivateKeyOptions = {
@@ -34,8 +36,10 @@ export type ClaudelanceClientOptions = {
   publicClient: PublicClient;
   walletClient?: WalletClient<Transport, Chain, Account>;
   core: Address;
-  /** ERC20 used by the bounty marketplace (cUSD on mainnet, MockCUSD on Sepolia). */
-  cUSD: Address;
+  /** Whitelisted escrow tokens (cUSD, CELO, USDC). */
+  tokens: TokenSet;
+  /** ERC-8004 Identity Registry. Workers must hold a token here to claimSlot. */
+  identityRegistry: Address;
 };
 
 /** Optional payload accepted by {@link ClaudelanceClient.submitPR}. */
@@ -46,54 +50,79 @@ export type SubmitPROptions = {
   metadata?: string;
 };
 
-/** Payload accepted by {@link ClaudelanceClient.postBounty}. */
+/** Payload accepted by {@link ClaudelanceClient.postBounty} (open marketplace). */
 export type PostBountyOptions = {
-  /** Phase 1 UI uses 0 = Code; 0-255 is reserved for future tiers. */
+  /** ERC20 used for escrow + payout. Must be whitelisted on chain. */
+  token: Address;
+  /** 0 = Code; 0-255 reserved for future tiers. */
   bountyType?: number;
   targetRepoUrl: string;
   instructionUrl: string;
-  /** keccak256 of the off-chain JSON spec. Use `0x000…` for ad-hoc bounties. */
+  /** keccak256 of the off-chain JSON spec, or 0x000… for ad-hoc bounties. */
   requirementsHash?: `0x${string}`;
-  /** Reward in cUSD wei. Must be >= 0.5e18. */
+  /** Reward in token wei. Must be >= the per-token `minBounty`. */
   amount: bigint;
-  /** Maximum simultaneous claimers (1..MAX_SLOTS). */
+  /** Maximum simultaneous claimers (1..MAX_SLOTS=20). */
   maxSlots: number;
-  /** Anti-sybil stake in cUSD wei (0 to disable). */
+  /** Anti-sybil stake in token wei. v2 requires `> 0`. */
   stake: bigint;
-  /** Bounty lifetime in seconds (1 day .. 14 days). */
+  /** Bounty lifetime in seconds (1..14 days). */
   deadlineSeconds: bigint;
   /** Require CI to pass before a winner is eligible. */
   ciRequired: boolean;
 };
 
+/** Payload accepted by {@link ClaudelanceClient.postDirectHire} (single chosen worker). */
+export type PostDirectHireOptions = {
+  token: Address;
+  /** Worker who will exclusively own the single slot. Must be non-zero. */
+  targetWorker: Address;
+  bountyType?: number;
+  targetRepoUrl: string;
+  instructionUrl: string;
+  requirementsHash?: `0x${string}`;
+  amount: bigint;
+  /** Stake required from the chosen worker. Must be `> 0`. */
+  stake: bigint;
+  deadlineSeconds: bigint;
+};
+
 /**
- * High-level read + write client for ClaudelanceCore. Wraps viem so an
- * agent only deals with marketplace concepts (bounty, claim, submit,
- * settle) and never has to think about viem ABI plumbing.
+ * High-level read + write client for ClaudelanceCore v2.
  *
- * Use the static {@link ClaudelanceClient.fromPrivateKey} factory for
- * the common case (agent runs with a single hot key). For composed
- * apps that already have a viem wallet client, instantiate directly.
+ * Multi-token escrow: every write that moves tokens takes (or infers from
+ * the bounty) the ERC20 to use. Workers must be registered ERC-8004 agents
+ * before they can `claimSlot`.
  */
 export class ClaudelanceClient {
   readonly publicClient: PublicClient;
   readonly walletClient?: WalletClient<Transport, Chain, Account>;
   readonly core: Address;
-  readonly cUSD: Address;
+  readonly tokens: TokenSet;
+  readonly identityRegistry: Address;
 
   constructor(opts: ClaudelanceClientOptions) {
     this.publicClient = opts.publicClient;
     this.walletClient = opts.walletClient;
     this.core = opts.core;
-    this.cUSD = opts.cUSD;
+    this.tokens = opts.tokens;
+    this.identityRegistry = opts.identityRegistry;
   }
 
   /**
    * Convenience: build a fully-wired client from a private key + network
-   * key. Resolves the canonical Claudelance core address for the chosen
-   * network from `@yeheskieltame/claudelance-types`.
+   * key. Resolves the canonical addresses from `@yeheskieltame/claudelance-types`.
+   *
+   * Note: only `'sepolia'` is wired up in v2.0. Mainnet returns from a future
+   * release once the Sepolia E2E loop has been validated.
    */
   static fromPrivateKey(opts: FromPrivateKeyOptions): ClaudelanceClient {
+    if (opts.network !== 'sepolia') {
+      throw new Error(
+        `[ClaudelanceClient] Network '${opts.network}' is not yet supported in v2. ` +
+          `Use 'sepolia' until mainnet deploy completes.`
+      );
+    }
     const chain = chainForNetwork(opts.network);
     const account = privateKeyToAccount(opts.privateKey);
     const transport = http(opts.rpcUrl);
@@ -101,19 +130,17 @@ export class ClaudelanceClient {
     const publicClient = createPublicClient({ chain, transport });
     const walletClient = createWalletClient({ chain, transport, account });
 
-    const deployment = opts.network === 'celo' ? MAINNET : SEPOLIA;
-
     return new ClaudelanceClient({
       publicClient,
       walletClient,
-      core: deployment.core,
-      cUSD: deployment.cUSD,
+      core: SEPOLIA.core,
+      tokens: SEPOLIA.tokens,
+      identityRegistry: SEPOLIA.identityRegistry,
     });
   }
 
   // ─── Read API ─────────────────────────────────────────────────────────
 
-  /** Fetch a single bounty by id. */
   async getBounty(bountyId: bigint): Promise<Bounty> {
     return (await this.publicClient.readContract({
       address: this.core,
@@ -123,7 +150,6 @@ export class ClaudelanceClient {
     })) as Bounty;
   }
 
-  /** Total number of bounties ever posted. */
   async getBountyCount(): Promise<bigint> {
     return (await this.publicClient.readContract({
       address: this.core,
@@ -133,12 +159,8 @@ export class ClaudelanceClient {
   }
 
   /**
-   * Return every currently-open bounty. Uses a multicall on the public
-   * client so the request is one round-trip per `MAX_SLOTS`-sized batch.
-   *
-   * For very high `bountyCount` this scans linearly — fine for the
-   * hackathon scope (hundreds at most). A future PR can subscribe to
-   * `BountyPosted` events for an incremental cursor.
+   * Return every currently-open bounty. Linear scan via multicall — fine for
+   * the hackathon scope (hundreds at most).
    */
   async listOpenBounties(): Promise<Array<Bounty & { id: bigint }>> {
     const count = await this.getBountyCount();
@@ -161,14 +183,13 @@ export class ClaudelanceClient {
     const out: Array<Bounty & { id: bigint }> = [];
     for (let idx = 0; idx < results.length; idx++) {
       const b = results[idx] as Bounty;
-      // status 0 == Open
       if (b.status === 0) out.push({ ...b, id: BigInt(idx + 1) });
     }
     return out;
   }
 
-  /** Headline marketplace stats — useful for dashboards / agent self-reports. */
-  async getStats(): Promise<{
+  /** Per-token marketplace stats. `resolved`, `posters`, `workers` are global. */
+  async getStats(token: Address): Promise<{
     volume: bigint;
     revenue: bigint;
     resolved: bigint;
@@ -180,33 +201,40 @@ export class ClaudelanceClient {
         address: this.core,
         abi: CLAUDELANCE_CORE_ABI,
         functionName: 'getStats',
+        args: [token],
       })) as readonly [bigint, bigint, bigint, bigint, bigint];
     return { volume, revenue, resolved, posters, workers };
   }
 
-  /** Pending earnings (post-pickWinner payout + post-settleStake refunds) for an address. */
-  async getEarnings(account: Address): Promise<bigint> {
+  /** Pending earnings for an address in a specific token. */
+  async getEarnings(account: Address, token: Address): Promise<bigint> {
     return (await this.publicClient.readContract({
       address: this.core,
       abi: CLAUDELANCE_CORE_ABI,
       functionName: 'earnings',
-      args: [account],
+      args: [account, token],
     })) as bigint;
   }
 
-  /** Pending earnings for the wallet client's account; throws if no wallet was wired up. */
-  async getMyEarnings(): Promise<bigint> {
-    const me = this.requireAccount();
-    return this.getEarnings(me);
+  /** Pending earnings for the wallet account in a specific token. */
+  async getMyEarnings(token: Address): Promise<bigint> {
+    return this.getEarnings(this.requireAccount(), token);
+  }
+
+  /** True iff `agent` holds at least one ERC-8004 Identity NFT. */
+  async hasAgentIdentity(agent: Address): Promise<boolean> {
+    const balance = (await this.publicClient.readContract({
+      address: this.identityRegistry,
+      abi: ERC721_BALANCE_OF_ABI,
+      functionName: 'balanceOf',
+      args: [agent],
+    })) as bigint;
+    return balance > 0n;
   }
 
   /**
-   * Eligibility check before claiming. Returns true only when:
-   *  - bounty is Open
-   *  - block.timestamp < bounty.deadline
-   *  - bounty.claimedSlots < bounty.maxSlots
-   *  - this client's account has not already claimed
-   * Mirrors `claimSlot`'s on-chain guards so agents don't waste gas.
+   * Eligibility check before claiming. Mirrors on-chain guards so agents
+   * don't waste gas on a guaranteed-revert claim.
    */
   async canClaim(bountyId: bigint, account?: Address): Promise<boolean> {
     const who = account ?? this.requireAccount();
@@ -214,6 +242,10 @@ export class ClaudelanceClient {
     if (b.status !== 0) return false;
     if (b.deadline <= BigInt(Math.floor(Date.now() / 1000))) return false;
     if (b.claimedSlots >= b.maxSlots) return false;
+    if (b.targetWorker !== ZERO_ADDRESS && b.targetWorker.toLowerCase() !== who.toLowerCase()) {
+      return false;
+    }
+    if (!(await this.hasAgentIdentity(who))) return false;
 
     const claimed = (await this.publicClient.readContract({
       address: this.core,
@@ -226,15 +258,6 @@ export class ClaudelanceClient {
 
   // ─── Worker write API ────────────────────────────────────────────────
 
-  /**
-   * Claim a slot on a bounty. Reverts on chain if the bounty is closed,
-   * the deadline has passed, slots are full, or the account has already
-   * claimed. Prefer {@link claimSlotWithApproval} unless you've already
-   * pre-approved cUSD spending.
-   *
-   * @returns the transaction hash. Await `publicClient.waitForTransactionReceipt`
-   *          if you need confirmation before the next call.
-   */
   async claimSlot(bountyId: bigint): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -248,12 +271,9 @@ export class ClaudelanceClient {
   }
 
   /**
-   * Convenience: approve cUSD for the stake if needed, then claim the
-   * slot. Skips the approval tx when the existing allowance is already
-   * sufficient. Returns the claim tx hash.
-   *
-   * NOTE: emits up to 2 transactions. The approval tx is awaited so
-   * `claimSlot` does not race ahead of an unmined approval.
+   * Approve the bounty's token for the required stake (if needed) then
+   * claim the slot. Two transactions max; the approval is awaited so
+   * `claimSlot` cannot race ahead of an unmined approval.
    */
   async claimSlotWithApproval(bountyId: bigint): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
@@ -262,32 +282,11 @@ export class ClaudelanceClient {
     const stake = bounty.stakeRequired;
 
     if (stake > 0n) {
-      const allowance = (await this.publicClient.readContract({
-        address: this.cUSD,
-        abi: CUSD_ABI,
-        functionName: 'allowance',
-        args: [who, this.core],
-      })) as bigint;
-      if (allowance < stake) {
-        const approveHash = await wallet.writeContract({
-          address: this.cUSD,
-          abi: CUSD_ABI,
-          functionName: 'approve',
-          args: [this.core, stake],
-          account: wallet.account,
-          chain: wallet.chain,
-        });
-        await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
-      }
+      await this.ensureAllowance(bounty.token, who, stake);
     }
     return this.claimSlot(bountyId);
   }
 
-  /**
-   * Submit a PR for a claimed bounty. One-shot per (bountyId, worker) —
-   * the contract rejects any subsequent submitPR even with corrected
-   * inputs, so pass the final PR URL + head commit hash.
-   */
   async submitPR(bountyId: bigint, opts: SubmitPROptions): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -300,12 +299,6 @@ export class ClaudelanceClient {
     });
   }
 
-  /**
-   * Settle a single claimer's stake on a resolved or cancelled bounty.
-   * Permissionless — anyone can call for any worker; the contract
-   * enforces the refund-vs-forfeit rules identically regardless of
-   * caller. Defaults to settling the wallet account's own stake.
-   */
   async settleStake(bountyId: bigint, worker?: Address): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -318,34 +311,37 @@ export class ClaudelanceClient {
     });
   }
 
-  /**
-   * Pull-pattern withdrawal: transfers every cUSD credited to the wallet
-   * account (winner payouts, stake refunds, poster cancellation refunds,
-   * accrued treasury fees) to the wallet in one transaction. Always
-   * callable, even when the contract is paused.
-   */
-  async withdrawEarnings(): Promise<`0x${string}`> {
+  /** Pull-pattern withdrawal for a single token. Always callable, even when paused. */
+  async withdrawEarnings(token: Address): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
       address: this.core,
       abi: CLAUDELANCE_CORE_ABI,
       functionName: 'withdrawEarnings',
+      args: [token],
       account: wallet.account,
       chain: wallet.chain,
     });
   }
 
+  /**
+   * Convenience: sweep earnings for every whitelisted token in `this.tokens`.
+   * Skips tokens where the wallet has zero balance to save gas.
+   */
+  async withdrawAllEarnings(): Promise<Array<{ token: Address; hash: `0x${string}` }>> {
+    const me = this.requireAccount();
+    const tokens: Address[] = [this.tokens.cUSD, this.tokens.CELO, this.tokens.USDC];
+    const out: Array<{ token: Address; hash: `0x${string}` }> = [];
+    for (const t of tokens) {
+      const owed = await this.getEarnings(me, t);
+      if (owed === 0n) continue;
+      out.push({ token: t, hash: await this.withdrawEarnings(t) });
+    }
+    return out;
+  }
+
   // ─── Poster write API ────────────────────────────────────────────────
 
-  /**
-   * Post a new bounty. Transfers `amount` cUSD escrow from the wallet
-   * into the contract. Requires existing cUSD allowance; use
-   * {@link postBountyWithApproval} to auto-approve.
-   *
-   * @returns the deploy tx hash. Resolve the new bountyId by waiting
-   * for the receipt and reading the `BountyPosted` event, or by
-   * calling `getBountyCount()` after the tx confirms.
-   */
   async postBounty(opts: PostBountyOptions): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -353,6 +349,7 @@ export class ClaudelanceClient {
       abi: CLAUDELANCE_CORE_ABI,
       functionName: 'postBounty',
       args: [
+        opts.token,
         opts.bountyType ?? 0,
         opts.targetRepoUrl,
         opts.instructionUrl,
@@ -368,46 +365,40 @@ export class ClaudelanceClient {
     });
   }
 
-  /**
-   * Convenience: approve cUSD escrow if allowance is insufficient,
-   * then post the bounty. Approval tx is awaited so postBounty cannot
-   * race ahead of an unmined approval.
-   */
   async postBountyWithApproval(opts: PostBountyOptions): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
-    const who = wallet.account.address;
-
-    const allowance = (await this.publicClient.readContract({
-      address: this.cUSD,
-      abi: CUSD_ABI,
-      functionName: 'allowance',
-      args: [who, this.core],
-    })) as bigint;
-
-    if (allowance < opts.amount) {
-      const approveHash = await wallet.writeContract({
-        address: this.cUSD,
-        abi: CUSD_ABI,
-        functionName: 'approve',
-        args: [this.core, opts.amount],
-        account: wallet.account,
-        chain: wallet.chain,
-      });
-      await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
-    }
-
+    await this.ensureAllowance(opts.token, wallet.account.address, opts.amount);
     return this.postBounty(opts);
   }
 
-  /**
-   * Poster picks the winning submission. O(1) on chain — credits the
-   * winner's payout + treasury fee atomically; stake settlement is
-   * separate via {@link settleStake}.
-   *
-   * Reverts if the bounty is not Open, the caller is not the poster,
-   * the winner isn't a claimer, or — when ciRequired — the winner's
-   * submission lacks a passing CI attestation.
-   */
+  async postDirectHire(opts: PostDirectHireOptions): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'postDirectHire',
+      args: [
+        opts.token,
+        opts.targetWorker,
+        opts.bountyType ?? 0,
+        opts.targetRepoUrl,
+        opts.instructionUrl,
+        opts.requirementsHash ?? `0x${'0'.repeat(64)}`,
+        opts.amount,
+        opts.stake,
+        opts.deadlineSeconds,
+      ],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  async postDirectHireWithApproval(opts: PostDirectHireOptions): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    await this.ensureAllowance(opts.token, wallet.account.address, opts.amount);
+    return this.postDirectHire(opts);
+  }
+
   async pickWinner(bountyId: bigint, winner: Address): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -420,12 +411,6 @@ export class ClaudelanceClient {
     });
   }
 
-  /**
-   * Cancel an unresolved bounty after its deadline. During the 3-day
-   * grace window only the poster may cancel; after grace, anyone may
-   * call. Credits the poster the full bounty amount via the earnings
-   * mapping; stake settlement happens separately via {@link settleStake}.
-   */
   async cancelExpired(bountyId: bigint): Promise<`0x${string}`> {
     const wallet = this.requireWalletClient();
     return wallet.writeContract({
@@ -439,6 +424,31 @@ export class ClaudelanceClient {
   }
 
   // ─── Internal helpers ────────────────────────────────────────────────
+
+  /**
+   * Reads `allowance(owner, core)` for the given token and submits an
+   * `approve(core, amount)` tx if the allowance is short. Awaits the
+   * receipt so callers can safely chain a write.
+   */
+  protected async ensureAllowance(token: Address, owner: Address, needed: bigint): Promise<void> {
+    const wallet = this.requireWalletClient();
+    const allowance = (await this.publicClient.readContract({
+      address: token,
+      abi: CUSD_ABI,
+      functionName: 'allowance',
+      args: [owner, this.core],
+    })) as bigint;
+    if (allowance >= needed) return;
+    const hash = await wallet.writeContract({
+      address: token,
+      abi: CUSD_ABI,
+      functionName: 'approve',
+      args: [this.core, needed],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+  }
 
   /** @internal */
   protected requireAccount(): Address {
@@ -463,3 +473,13 @@ export class ClaudelanceClient {
     return this.walletClient;
   }
 }
+
+const ERC721_BALANCE_OF_ABI = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const;
