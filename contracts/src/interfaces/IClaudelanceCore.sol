@@ -51,9 +51,7 @@ interface IClaudelanceCore {
     event SlotClaimed(uint256 indexed bountyId, address indexed worker);
     event PRSubmitted(uint256 indexed bountyId, address indexed worker, string prUrl, bytes32 commitHash);
     event CIAttested(uint256 indexed bountyId, address indexed worker, bool passed);
-    event BountyResolved(
-        uint256 indexed bountyId, address indexed winner, uint96 winnerPayout, uint96 protocolFee
-    );
+    event BountyResolved(uint256 indexed bountyId, address indexed winner, uint96 winnerPayout, uint96 protocolFee);
     event BountyCancelled(uint256 indexed bountyId, address indexed poster, uint96 refundAmount);
     event StakeRefunded(uint256 indexed bountyId, address indexed worker, uint96 amount);
     event StakeForfeited(uint256 indexed bountyId, address indexed worker, uint96 amount);

@@ -6,9 +6,6 @@ import { ClaudelanceCore } from "../src/ClaudelanceCore.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Deploy is Script {
-    /// @dev Set ALLOW_SHARED_ADMIN_WALLETS=true to bypass the "distinct wallets"
-    ///      guard. Intended only for ephemeral testnet smoke deploys; never set
-    ///      this flag for mainnet broadcasts.
     function run() external returns (ClaudelanceCore core) {
         address cusd = vm.envAddress("CUSD_ADDRESS");
         address treasury = vm.envAddress("TREASURY_ADDRESS");
@@ -20,17 +17,16 @@ contract Deploy is Script {
         require(treasury != address(0), "TREASURY_ADDRESS missing");
         require(relayer != address(0), "CI_RELAYER_ADDRESS missing");
 
-        // Mainnet (chainid 42220) MUST use four distinct wallets so that a
-        // single compromised key cannot drain or reroute the contract.
+        // Mainnet: distinct keys are mandatory. Override flag is honored only off-mainnet.
         bool isMainnet = block.chainid == 42_220;
         if (isMainnet || !allowShared) {
             address deployer = msg.sender;
-            require(owner != treasury, "owner == treasury (separate keys required)");
-            require(owner != relayer, "owner == relayer (separate keys required)");
-            require(treasury != relayer, "treasury == relayer (separate keys required)");
-            require(deployer != owner, "deployer == owner (use a separate ops key)");
-            require(deployer != treasury, "deployer == treasury (use a separate ops key)");
-            require(deployer != relayer, "deployer == relayer (use a separate ops key)");
+            require(owner != treasury, "owner == treasury");
+            require(owner != relayer, "owner == relayer");
+            require(treasury != relayer, "treasury == relayer");
+            require(deployer != owner, "deployer == owner");
+            require(deployer != treasury, "deployer == treasury");
+            require(deployer != relayer, "deployer == relayer");
         }
 
         vm.startBroadcast();
@@ -43,7 +39,7 @@ contract Deploy is Script {
         console2.log("  relayer: ", relayer);
         console2.log("  owner:   ", owner);
         if (isMainnet) {
-            console2.log("MAINNET DEPLOY -- verify owner is a multisig and rotate hot keys after launch");
+            console2.log("MAINNET DEPLOY -- verify owner is a multisig");
         }
 
         _writeDeployment(address(core), cusd, treasury, relayer, owner);
