@@ -13,24 +13,24 @@ Foundry workspace for `ClaudelanceCore.sol` — the single immutable contract be
 
 ```
 contracts/
-├── src/
-│   ├── ClaudelanceCore.sol            single immutable contract (Ownable2Step, Pausable, ReentrancyGuard)
-│   ├── interfaces/IClaudelanceCore.sol
-│   └── mocks/MockCUSD.sol             Sepolia stand-in — never deploy to mainnet
-├── test/
-│   ├── ClaudelanceCore.t.sol          67 unit tests
-│   ├── invariant/                     4 invariants × 128k transitions each
-│   └── integration/SepoliaLive.t.sol  28 fork tests vs live Sepolia bytecode
-├── script/
-│   ├── Deploy.s.sol                   distinct-keys-enforced mainnet broadcast
-│   ├── DeployMockCUSD.s.sol           testnet cUSD stand-in
-│   ├── SeedBounties.s.sol             15 seed bounties for dogfooding
-│   ├── IntegrationE2E.s.sol           single-bounty E2E broadcast
-│   ├── IntegrationResolveBatch.s.sol  resolve-batch broadcast (forfeit + alt-winner)
-│   └── IntegrationFullFlow.s.sol      27-tx end-to-end against the post-PR-11 ABI
-└── deployments/
-    ├── celo-mainnet.json              source of truth for chain 42220
-    └── celo-sepolia.json              source of truth for chain 11142220
+  src/
+    ClaudelanceCore.sol            single immutable contract (Ownable2Step, Pausable, ReentrancyGuard)
+    interfaces/IClaudelanceCore.sol
+    mocks/MockCUSD.sol             Sepolia stand-in, never deploy to mainnet
+  test/
+    ClaudelanceCore.t.sol          67 unit tests
+    invariant/                     4 invariants times 128k transitions each
+    integration/SepoliaLive.t.sol  28 fork tests vs live Sepolia bytecode
+  script/
+    Deploy.s.sol                   distinct-keys-enforced mainnet broadcast
+    DeployMockCUSD.s.sol           testnet cUSD stand-in
+    SeedBounties.s.sol             15 seed bounties for dogfooding
+    IntegrationE2E.s.sol           single-bounty E2E broadcast
+    IntegrationResolveBatch.s.sol  resolve-batch broadcast (forfeit + alt-winner)
+    IntegrationFullFlow.s.sol      27-tx end-to-end against the post-PR-11 ABI
+  deployments/
+    celo-mainnet.json              source of truth for chain 42220
+    celo-sepolia.json              source of truth for chain 11142220
 ```
 
 ## Audit posture
@@ -38,7 +38,7 @@ contracts/
 | Check | Result |
 |---|---|
 | Foundry unit tests | **67/67 pass** |
-| Foundry invariant suite (256 runs × 500 calls = 128k transitions / invariant) | **4/4 pass, 0 reverts** |
+| Foundry invariant suite (256 runs * 500 calls = 128k transitions / invariant) | **4/4 pass, 0 reverts** |
 | Foundry fork tests against live Sepolia | **28/28 pass** |
 | Line coverage on `ClaudelanceCore.sol` | **98.45%** |
 | Branch coverage | **100%** |
@@ -50,9 +50,9 @@ contracts/
 
 Invariants covered:
 
-- **I1 value conservation** — `cUSD.balanceOf(core) == deposits − withdrawals`
-- **I2 solvency** — `cUSD.balanceOf(core) ≥ Σ earnings`
-- **I3 structural** — `totalBountiesResolved ≤ bountyCount`
+- **I1 value conservation** — `cUSD.balanceOf(core) == deposits - withdrawals`
+- **I2 solvency** — `cUSD.balanceOf(core) >= sum(earnings)`
+- **I3 structural** — `totalBountiesResolved <= bountyCount`
 - **I4 monotonic revenue** — `totalProtocolRevenue` never regresses
 
 ## Contract surface
@@ -155,9 +155,9 @@ Owner is a [Safe multisig on Celo](https://app.safe.global/home?safe=celo:0xe9Fc
 
 Two-step rotation pattern with timelock:
 
-1. **Propose** via Safe → `proposeTreasury(newAddr)` or `proposeCIRelayer(newAddr)`. Emits a `*Proposed` event with `effectiveAt = block.timestamp + 2 days`.
+1. **Propose** via Safe, calling `proposeTreasury(newAddr)` or `proposeCIRelayer(newAddr)`. Emits a `*Proposed` event with `effectiveAt = block.timestamp + 2 days`.
 2. Wait the timelock. Anyone (not just the owner) can then call `applyTreasury()` / `applyCIRelayer()` once `effectiveAt` is reached, **as long as we are still within the 14-day validity window**.
-3. **Cancel** at any time before apply via Safe → `cancelPendingTreasury()` / `cancelPendingCIRelayer()`.
+3. **Cancel** at any time before apply via Safe, calling `cancelPendingTreasury()` or `cancelPendingCIRelayer()`.
 
 If a proposal sits unapplied beyond `effectiveAt + 14 days`, it expires (`ProposalExpired`) and the owner must `proposeX` again.
 
