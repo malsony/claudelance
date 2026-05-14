@@ -1,0 +1,44 @@
+{
+  "chainId": 42220,
+  "chainName": "celo-mainnet",
+  "core": "0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C",
+  "cUSD": "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+  "cUSDKind": "Mento canonical (now reports symbol 'USDm' after the 2026 rebrand; address and 18-decimal ERC20 surface unchanged)",
+  "treasury": "0xCC0cCac212999612BdDdEb607B33CC1a46F8A401",
+  "ciRelayer": "0x1fEDda23c2945D59f3929e6C463cF685aC077ad5",
+  "owner": "0x110B992e63cbd34A40ff76AcCaa47Bd2064e7222",
+  "deployer": "0xe6C226FA6d7fAb84046b0285b46951A002CEfdB7",
+  "deployedAt": 1778734840,
+  "verification": {
+    "verifier": "Etherscan API V2",
+    "compiler": "v0.8.24+commit.e11b9ed9",
+    "optimizer": { "enabled": true, "runs": 200 },
+    "viaIR": true,
+    "status": "Pass - Verified"
+  },
+  "explorer": {
+    "core": {
+      "celoscan": "https://celoscan.io/address/0x2b638dfefa9e7538a8ceeebe7a89ce7de4641c5c#code",
+      "blockscout": "https://explorer.celo.org/mainnet/address/0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C"
+    },
+    "cUSD": {
+      "celoscan": "https://celoscan.io/address/0x765de816845861e75a25fca122bb6898b8b1282a"
+    }
+  },
+  "constants": {
+    "PROTOCOL_FEE_BPS": 200,
+    "MAX_SLOTS": 20,
+    "MIN_DEADLINE": 86400,
+    "MAX_DEADLINE": 1209600,
+    "MIN_BOUNTY": "500000000000000000",
+    "RESOLUTION_GRACE_PERIOD": 259200,
+    "ADMIN_TIMELOCK": 172800,
+    "PROPOSAL_VALIDITY_WINDOW": 1209600
+  },
+  "audit": {
+    "tests": { "unit": 67, "invariant": 4, "fork": 28, "totalPassing": 99 },
+    "coverage": { "lines": "98.45%", "branches": "100%", "statements": "99.16%" },
+    "slither": "0 findings after filtering known-safe categories (timestamps, default-zero counters, OZ Pausable indexing)",
+    "gas": { "pickWinner": 136505, "settleStake": 52000 }
+  }
+}

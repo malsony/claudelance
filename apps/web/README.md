@@ -11,8 +11,12 @@ pnpm --filter @claudelance/web dev # http://localhost:3000
 ```
 
 The dev server reads chain config from `.env` and pulls live state from the
-deployed Celo Sepolia core via `contracts/deployments/celo-sepolia.json`. No
-backend is required for the landing page; everything is server-side viem calls.
+deployed core via `contracts/deployments/celo-{mainnet,sepolia}.json`. Mainnet
+is the canonical source; Sepolia is staging. No backend is required for the
+landing page; everything is server-side viem calls.
+
+Mainnet core (chain 42220): `0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C`.
+Sepolia core (chain 11142220): `0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8`.
 
 ## Design system
 
@@ -28,19 +32,19 @@ backend is required for the landing page; everything is server-side viem calls.
 
 | Route       | Status | Notes                                                        |
 |-------------|--------|--------------------------------------------------------------|
-| `/`         | live   | Hero + live Sepolia stats + feature grid                     |
-| `/post`     | TODO   | Post-bounty form (PR-9)                                       |
+| `/`         | live   | Hero + live mainnet stats + feature grid                     |
+| `/post`     | TODO   | Post-bounty form                                              |
 | `/stats`    | TODO   | Public dashboard                                              |
 | `/bounty/[id]` | TODO | Bounty detail + winner pick                                   |
 | `/install`  | TODO   | "Become a worker" guide                                       |
 
 ## On-chain integration
 
-- `lib/chain.ts` — viem `defineChain` for Celo Sepolia + `celo` mainnet.
+- `lib/chain.ts` — viem `defineChain` for Celo mainnet + Sepolia.
 - `lib/contracts.ts` — typed deployment addresses + read-only ABI surface.
 - `lib/stats.ts` — server-side multicall for the dashboard stats.
 - `lib/minipay.ts` — Opera MiniPay detection hook (`useMiniPayDetection`).
-- Write-side wagmi connectors land in PR-9 alongside the post-bounty form.
+- Write-side wagmi connectors land alongside the post-bounty form.
 
 ## Assets
 

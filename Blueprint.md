@@ -265,15 +265,20 @@ claudelance/
 
 ### Networks
 
-| Environment | Network | RPC |
-|-------------|---------|-----|
-| Development | Celo Sepolia | `https://forno.celo-sepolia.celo-testnet.org/` |
-| Production | Celo Mainnet | `https://forno.celo.org` |
+| Environment | Network | Chain ID | RPC |
+|-------------|---------|----------|-----|
+| Staging | Celo Sepolia | 11142220 | `https://forno.celo-sepolia.celo-testnet.org/` |
+| **Production** | **Celo Mainnet** | **42220** | `https://forno.celo.org` |
 
-### Token
+### Live Mainnet contracts
 
-- **Celo Mainnet cUSD:** `0x765DE816845861e75A25fCA122bb6898B8B1282a`
-- **Faucet:** https://faucet.celo.org/celo-sepolia
+| Role | Address |
+|------|---------|
+| ClaudelanceCore (verified) | [`0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C`](https://celoscan.io/address/0x2b638dfefa9e7538a8ceeebe7a89ce7de4641c5c#code) |
+| cUSD (canonical Mento, now branded USDm) | `0x765DE816845861e75A25fCA122bb6898B8B1282a` |
+| owner / treasury / ciRelayer | distinct EOAs — see `contracts/deployments/celo-mainnet.json` |
+
+Sepolia staging mirrors this layout with `MockCUSD` as the cUSD stand-in. Faucet: https://faucet.celo.org/celo-sepolia
 
 ---
 
@@ -539,10 +544,13 @@ contract ClaudelanceCore is ReentrancyGuard, Ownable, Pausable {
         string calldata metadata
     ) external;
     function withdrawEarnings() external nonReentrant;
-    
+
+    // Permissionless stake settlement (post-resolution pull pattern)
+    function settleStake(uint256 bountyId, address worker) external nonReentrant;
+
     // Relayer
     function attestCI(uint256 bountyId, address worker, bool passed) external;
-    
+
     // Views (judge-friendly)
     function getBounty(uint256 bountyId) external view returns (Bounty memory);
     function getSubmission(uint256 bountyId, address worker) external view returns (Submission memory);
@@ -555,12 +563,17 @@ contract ClaudelanceCore is ReentrancyGuard, Ownable, Pausable {
         uint256 posters,
         uint256 workers
     );
-    
-    // Admin
-    function setCIRelayer(address newRelayer) external onlyOwner;
-    function setTreasury(address newTreasury) external onlyOwner;
+
+    // Admin — Ownable2Step, 2-day timelock + 14-day validity on rotation
+    function proposeTreasury(address newTreasury) external onlyOwner;
+    function applyTreasury() external;                           // anyone, after timelock
+    function cancelPendingTreasury() external onlyOwner;
+    function proposeCIRelayer(address newRelayer) external onlyOwner;
+    function applyCIRelayer() external;                          // anyone, after timelock
+    function cancelPendingCIRelayer() external onlyOwner;
     function pause() external onlyOwner;
     function unpause() external onlyOwner;
+    function rescueERC20(IERC20 token, address to, uint256 amount) external onlyOwner;
 }
 ```
 
@@ -595,18 +608,25 @@ Edge cases:
 
 ### Deployment
 
-```bash
-# Sepolia (Day 1)
-forge script script/Deploy.s.sol \
-  --rpc-url celo-sepolia \
-  --broadcast \
-  --verify
+Both networks deployed and verified on Celoscan as of 2026-05-14. `Deploy.s.sol` enforces distinct deployer/owner/treasury/relayer keys on mainnet (chainid 42220).
 
-# Mainnet (Day 6)
+```bash
+# Mainnet — chainid 42220 enforces distinct keys; do NOT pass ALLOW_SHARED_ADMIN_WALLETS
+CUSD_ADDRESS=$CUSD_MAINNET \
+TREASURY_ADDRESS=$MAINNET_TREASURY_ADDRESS \
+CI_RELAYER_ADDRESS=$MAINNET_RELAYER_ADDRESS \
+OWNER_ADDRESS=$MAINNET_OWNER_ADDRESS \
 forge script script/Deploy.s.sol \
-  --rpc-url celo \
-  --broadcast \
-  --verify
+  --rpc-url $CELO_MAINNET_RPC \
+  --private-key $MAINNET_DEPLOYER_PRIVATE_KEY \
+  --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY
+
+# Sepolia staging — shared keys allowed
+ALLOW_SHARED_ADMIN_WALLETS=true \
+forge script script/Deploy.s.sol \
+  --rpc-url $CELO_SEPOLIA_RPC \
+  --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY \
+  --private-key $DEPLOYER_PRIVATE_KEY
 ```
 
 ---
@@ -998,14 +1018,14 @@ Critical pre-coding tasks:
 
 ### Phase 1: MVP Build (Day 1-6)
 
-| Day | Focus | Critical Output |
-|-----|-------|----------------|
-| **Day 1** | Smart Contracts | `ClaudelanceCore.sol` with fee + 20 tests + deploy Sepolia |
-| **Day 2** | Frontend Foundation | Next.js scaffold + MiniPay hook + post bounty page |
-| **Day 3** | Frontend Complete | Bounty feed + detail + winner pick + `/stats` |
-| **Day 4** | Worker Skill + npm #1 | Onboarding + worker loop + **publish `@claudelance/worker`** |
-| **Day 5** | Integration + Relayer | E2E test + relayer running on Mac Mini |
-| **Day 6** | Production + npm #2 | Mainnet deploy + Vercel deploy + **publish `@claudelance/types`** |
+| Day | Focus | Critical Output | Status |
+|-----|-------|----------------|--------|
+| **Day 0** | Smart Contracts + deploy | Hardened `ClaudelanceCore.sol` (Ownable2Step, pull pattern, timelock + validity window, O(1) pickWinner) — 67 unit + 4 invariant + 28 fork tests, Slither clean, **Sepolia + Mainnet deployed and verified** | ✅ DONE |
+| **Day 2** | Frontend Foundation | Next.js scaffold + MiniPay hook + post bounty page | partial |
+| **Day 3** | Frontend Complete | Bounty feed + detail + winner pick + `/stats` | — |
+| **Day 4** | Worker Skill + npm #1 | Onboarding + worker loop + **publish `@claudelance/worker`** | — |
+| **Day 5** | Integration + Relayer | E2E test + relayer running on Mac Mini | — |
+| **Day 6** | Production + npm #2 | Vercel deploy + **publish `@claudelance/types`** (mainnet deploy already done Day 0) | — |
 
 ### Phase 2: Submission Day (Day 7)
 

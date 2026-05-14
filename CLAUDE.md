@@ -59,17 +59,31 @@ Supplementary repos under `github.com/yeheskieltame/`: `bounties-registry` (Phas
 
 ## Smart contract surface (`ClaudelanceCore.sol`)
 
-Single contract — `ReentrancyGuard + Ownable + Pausable`. Public mutating fns:
+Single contract — `ReentrancyGuard + Ownable2Step + Pausable`. Public mutating fns:
 - Employer: `postBounty`, `pickWinner`, `cancelExpired`
 - Worker: `claimSlot`, `submitPR`, `withdrawEarnings`
+- Anyone (permissionless after resolution): `settleStake(bountyId, worker)` — pull-pattern stake settlement
 - Relayer: `attestCI`
-- Admin: `setCIRelayer`, `setTreasury`, `pause`, `unpause`
+- Admin (2-day timelock + 14-day validity window): `proposeTreasury`, `applyTreasury`, `cancelPendingTreasury`, `proposeCIRelayer`, `applyCIRelayer`, `cancelPendingCIRelayer`, `pause`, `unpause`, `rescueERC20`
 
-Constants: `PROTOCOL_FEE_BPS = 200` (2%), `MAX_SLOTS = 20`, `MIN_DEADLINE = 1 days`, `MAX_DEADLINE = 14 days`, `MIN_BOUNTY = 0.5e18`.
+Constants: `PROTOCOL_FEE_BPS = 200` (2%), `MAX_SLOTS = 20`, `MIN_DEADLINE = 1 days`, `MAX_DEADLINE = 14 days`, `MIN_BOUNTY = 0.5e18`, `RESOLUTION_GRACE_PERIOD = 3 days`, `ADMIN_TIMELOCK = 2 days`, `PROPOSAL_VALIDITY_WINDOW = 14 days`.
 
 Stats are public state vars (`totalBountyVolume`, `totalProtocolRevenue`, etc.) + `getStats()` view for judges.
 
-Per-bounty tx count target: ~25 (deposit + 5 claims + 5 PRs + 5 CI attests + winner pick + 3 refunds + 5 rep updates).
+Per-bounty tx count: posting + N claims + N submits + N attests + pickWinner + N settleStake + worker withdraws. Poster's hot path (`pickWinner`) is O(1) — ~136k gas regardless of slot count.
+
+### Mainnet deployment
+
+| Role | Address |
+|------|---------|
+| ClaudelanceCore (verified) | `0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C` on chain 42220 |
+| cUSD | `0x765DE816845861e75A25fCA122bb6898B8B1282a` |
+| owner | `0x110B992e63cbd34A40ff76AcCaa47Bd2064e7222` |
+| treasury | `0xCC0cCac212999612BdDdEb607B33CC1a46F8A401` |
+| ciRelayer | `0x1fEDda23c2945D59f3929e6C463cF685aC077ad5` |
+| deployer | `0xe6C226FA6d7fAb84046b0285b46951A002CEfdB7` |
+
+Sepolia staging: ClaudelanceCore `0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8`, MockCUSD `0x207D662337694796E76a4d5577DC72C93Cd92822`. See `contracts/deployments/celo-{mainnet,sepolia}.json` for full state.
 
 ## MCP / tooling installed (Day 0)
 
@@ -104,10 +118,9 @@ Eligibility gates that must pass: MiniPay-compatible (`useMiniPayDetection`), Ce
 
 ## Critical timeline
 
-- Day 0 (TODAY, 2026-05-14): admin setup — register org, npm scope, Talent Passport, fund wallet (~$5 CELO + ~$30 cUSD), domain
-- Day 1: `ClaudelanceCore.sol` + 20 tests + Sepolia deploy
+- Day 0 (2026-05-14): admin setup + `ClaudelanceCore.sol` + 67 unit / 4 invariant / 28 fork tests + **Sepolia + mainnet deploy** (both verified on Celoscan)
 - Day 4: publish `@claudelance/worker`
-- Day 6: mainnet deploy + Vercel deploy + publish `@claudelance/types`
+- Day 6: Vercel deploy + publish `@claudelance/types`
 - Day 7 (2026-05-21): submission deadline — KarmaGAP + 15 seed bounties + 4-min demo video + pitch deck + Talent Protocol submit
 - Day 8-15: sustained activity, onboard workers, publish remaining 4 npm packages
 - Day 29 (2026-05-29): hackathon ends
