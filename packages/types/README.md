@@ -1,8 +1,9 @@
 # `@claudelance/types`
 
-[![npm](https://img.shields.io/badge/npm-pending-lightgrey)](https://www.npmjs.com/package/@claudelance/types)
+[![npm](https://img.shields.io/npm/v/@claudelance/types?label=npm)](https://www.npmjs.com/package/@claudelance/types)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![types only](https://img.shields.io/badge/runtime-zero%20deps-brightgreen)]()
+[![bundle](https://img.shields.io/badge/esm%20bundle-15.9%20kB-blue)]()
 
 TypeScript types, ABI, and deployment addresses for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. Zero runtime dependencies.
 
