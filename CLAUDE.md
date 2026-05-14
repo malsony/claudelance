@@ -2,7 +2,7 @@
 
 > The first onchain marketplace where idle Claude Code subscriptions earn cUSD by solving GitHub bounties.
 > Hackathon: Celo Proof of Ship #8 (May 4-29, 2026). Submission Day 7 (May 21).
-> Full spec lives in `Blueprint.md` — that file is the source of truth; read it before assuming.
+> Full spec lives in `Blueprint.md`. Live deployment record: `contracts/deployments/celo-mainnet.json`.
 
 ## Locked decisions (do not re-litigate)
 
@@ -22,25 +22,28 @@
 | Smart contract bounty types | 0-255 (future-proof) |
 | Hackathon tracks | MiniApps + AI Powered Apps & Agents (dual entry) |
 | npm strategy | 2 packages by Day 7 + 4 more Day 9-15 |
+| Contract base | `ReentrancyGuard + Ownable2Step + Pausable` (immutable, no upgrade proxy) |
+| Stake settlement | Pull pattern via `settleStake(bountyId, worker)` — `pickWinner` stays O(1) |
+| Treasury payout | Pull pattern via `earnings[treasury]` — no push transfers to recipients |
+| Admin key rotation | 2-day timelock + 14-day validity window on `treasury` / `ciRelayer` rotation |
+| Mainnet wallet topology | 4 distinct keys — `Deploy.s.sol` aborts on chainid 42220 if any collide. Owner is a Safe multisig. |
+| Mainnet deployer | Must be the user's Talent-registered address (`0x77c4a1c…`) for Celo Proof of Ship attribution |
 
-## Repo structure (target — not yet scaffolded)
+## Repo structure
 
-```
-claudelance/                                # monorepo (pnpm workspace)
-├── contracts/                              # Foundry, Solidity 0.8.24
-├── apps/
-│   ├── web/                                # Next.js 15 MiniPay app
-│   └── relayer/                            # Hono + SQLite indexer + CI verifier
-└── packages/                               # npm-published
-    ├── worker/                             # @claudelance/worker  (Day 4)
-    ├── types/                              # @claudelance/types   (Day 6)
-    ├── contracts/                          # @claudelance/contracts (Day 9)
-    ├── sdk/                                # @claudelance/sdk     (Day 11)
-    ├── react/                              # claudelance-react    (Day 13)
-    └── cli/                                # @claudelance/cli     (Day 15)
-```
+| Path | Status | Notes |
+|------|--------|-------|
+| `contracts/` | ✅ live (mainnet + Sepolia) | Foundry, Solidity 0.8.24, OZ v5 |
+| `apps/web/` | 🚧 landing + stats live | Next.js 15 MiniPay app |
+| `apps/relayer/` | ⏳ Day 5 | Hono + SQLite indexer + CI verifier |
+| `packages/worker/` | ⏳ Day 4 | `@claudelance/worker` Claude Code CLI |
+| `packages/types/` | ⏳ Day 6 | `@claudelance/types` shared ABI + types |
+| `packages/contracts/` | ⏳ Day 9 | `@claudelance/contracts` ABI artifacts |
+| `packages/sdk/` | ⏳ Day 11 | `@claudelance/sdk` |
+| `packages/react/` | ⏳ Day 13 | `claudelance-react` hooks |
+| `packages/cli/` | ⏳ Day 15 | `@claudelance/cli` |
 
-Supplementary repos under `github.com/yeheskieltame/`: `bounties-registry` (Phase 1), `content-submissions`, `video-submissions`, etc. (Phase 2).
+Supplementary repos under `github.com/yeheskieltame/`: `bounties-registry` (Phase 1 JSON spec hashed on-chain), `content-submissions`, `video-submissions` (Phase 2).
 
 ## Tech stack pinned versions
 
@@ -110,11 +113,24 @@ Eligibility gates that must pass: MiniPay-compatible (`useMiniPayDetection`), Ce
 ## Working conventions
 
 - Treat Blueprint.md as authoritative for decisions; ask before deviating.
-- Smart contracts are immutable on mainnet — flagged as Critical risk. Every contract diff goes through `/security-review` before commit.
+- Smart contracts are immutable on mainnet. Every contract diff goes through `/security-review`, Slither, and the invariant suite (`forge test --match-path "test/invariant/*"`) before commit.
+- All post-Day-1 changes ship via `kiel-dev` branch → PR → self-review → `gh pr merge --merge --delete-branch`. Per-file commits are preferred; per-context PRs are preferred over kitchen-sink PRs (more commits + PRs improve hackathon scoring).
 - PR descriptions on worker-generated PRs MUST include: `Closes #<issue>`, `Claudelance Bounty: #<id>`, `Agent: claudelance-worker-#<id>`.
 - Worker rate limit: 30 GitHub req/min.
-- Mainnet deploys go through `--verify` flag against Celoscan.
+- Mainnet broadcasts go through `--verify` against Celoscan (Etherscan API V2).
 - Indonesian (Bahasa) is fine in chat; code, comments, commit messages stay in English.
+
+### ABI migration notes for downstream tooling
+
+Workers, relayers, frontends built against the contract must use the post-PR-11 surface:
+
+- **Removed**: `setTreasury(address)` and `setCIRelayer(address)`. Use `proposeTreasury` / `applyTreasury` / `cancelPendingTreasury` (and the relayer triplet) — 2-day timelock, anyone can call `applyX` after delay, owner can cancel any time before.
+- **Added**: `settleStake(uint256 bountyId, address worker)` — permissionless, callable by anyone after the bounty leaves `Open`. Stake refunds NO LONGER auto-credit during `pickWinner`; workers (or a treasury bot) must call `settleStake` before `withdrawEarnings` to claim stake refunds.
+- **Added events**: `TreasuryProposed`, `CIRelayerProposed`, `TreasuryProposalCancelled`, `CIRelayerProposalCancelled`.
+- **Added errors**: `InvalidUrl`, `NoPendingChange`, `TimelockNotElapsed`, `ProposalExpired`, `BountyNotResolved`, `StakeAlreadySettled`, `NoStakeRequired`.
+- `pickWinner` no longer emits `StakeRefunded` / `StakeForfeited` — those move to `settleStake`.
+
+Owner-only mainnet actions must go through the Safe at <https://app.safe.global/home?safe=celo:0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0>, not from a CLI key.
 
 ## Critical timeline
 
