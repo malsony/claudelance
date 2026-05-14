@@ -24,8 +24,8 @@
 | Frontend landing | In progress, hero + live stats on `/` | `apps/web` |
 | `/post`, `/bounty/[id]`, `/stats`, `/install` | Pending | — |
 | `@yeheskieltame/claudelance-worker` npm | Planned, Day 4 | Claude Code CLI skill |
-| `@yeheskieltame/claudelance-types` npm | Published-ready (build green, awaiting `pnpm publish`) | Shared ABI + TS types |
-| `@yeheskieltame/claudelance-sdk` npm | Published-ready (build green, awaiting `pnpm publish`) | Agent client built on viem |
+| `@yeheskieltame/claudelance-types` npm | Live (v0.1.1 on npmjs.com + GitHub Packages) | Shared ABI + TS types |
+| `@yeheskieltame/claudelance-sdk` npm | Live (v0.1.1 on npmjs.com + GitHub Packages) | Agent client built on viem |
 | Relayer (`apps/relayer`) | Planned, Day 5 | Hono + SQLite + CI verifier |
 
 Sections below describe the full intended product. Implementation status is shown inline with each section header.

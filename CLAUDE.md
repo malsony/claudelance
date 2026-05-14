@@ -37,8 +37,8 @@
 | `apps/web/` | in progress | Next.js 15 MiniPay app (landing + stats live) |
 | `apps/relayer/` | planned (Day 5) | Hono + SQLite indexer + CI verifier |
 | `packages/worker/` | planned (Day 4) | `@yeheskieltame/claudelance-worker` Claude Code CLI |
-| `packages/types/` | published-ready | `@yeheskieltame/claudelance-types` shared ABI + types |
-| `packages/sdk/` | published-ready | `@yeheskieltame/claudelance-sdk` agent client |
+| `packages/types/` | live on npmjs.com + GitHub Packages (v0.1.1) | `@yeheskieltame/claudelance-types` shared ABI + types |
+| `packages/sdk/` | live on npmjs.com + GitHub Packages (v0.1.1) | `@yeheskieltame/claudelance-sdk` agent client |
 | `packages/contracts/` | planned (Day 9) | `@yeheskieltame/claudelance-contracts` ABI artifacts |
 | `packages/react/` | planned (Day 13) | `claudelance-react` hooks |
 | `packages/cli/` | planned (Day 15) | `@yeheskieltame/claudelance-cli` (binaries `claudelance` and `cln`) |
