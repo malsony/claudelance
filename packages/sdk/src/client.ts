@@ -19,6 +19,7 @@ import {
 } from '@claudelance/types';
 
 import { chainForNetwork, type NetworkKey } from './chain.js';
+import { CUSD_ABI } from './cusd-abi.js';
 
 /** Inputs accepted by {@link ClaudelanceClient.fromPrivateKey}. */
 export type FromPrivateKeyOptions = {
@@ -33,6 +34,16 @@ export type ClaudelanceClientOptions = {
   publicClient: PublicClient;
   walletClient?: WalletClient<Transport, Chain, Account>;
   core: Address;
+  /** ERC20 used by the bounty marketplace (cUSD on mainnet, MockCUSD on Sepolia). */
+  cUSD: Address;
+};
+
+/** Optional payload accepted by {@link ClaudelanceClient.submitPR}. */
+export type SubmitPROptions = {
+  prUrl: string;
+  commitHash: `0x${string}`;
+  /** Free-form JSON the worker wants to attach (capabilities, model, notes). */
+  metadata?: string;
 };
 
 /**
@@ -48,11 +59,13 @@ export class ClaudelanceClient {
   readonly publicClient: PublicClient;
   readonly walletClient?: WalletClient<Transport, Chain, Account>;
   readonly core: Address;
+  readonly cUSD: Address;
 
   constructor(opts: ClaudelanceClientOptions) {
     this.publicClient = opts.publicClient;
     this.walletClient = opts.walletClient;
     this.core = opts.core;
+    this.cUSD = opts.cUSD;
   }
 
   /**
@@ -74,6 +87,7 @@ export class ClaudelanceClient {
       publicClient,
       walletClient,
       core: deployment.core,
+      cUSD: deployment.cUSD,
     });
   }
 
@@ -190,6 +204,117 @@ export class ClaudelanceClient {
     return !claimed;
   }
 
+  // ─── Worker write API ────────────────────────────────────────────────
+
+  /**
+   * Claim a slot on a bounty. Reverts on chain if the bounty is closed,
+   * the deadline has passed, slots are full, or the account has already
+   * claimed. Prefer {@link claimSlotWithApproval} unless you've already
+   * pre-approved cUSD spending.
+   *
+   * @returns the transaction hash. Await `publicClient.waitForTransactionReceipt`
+   *          if you need confirmation before the next call.
+   */
+  async claimSlot(bountyId: bigint): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'claimSlot',
+      args: [bountyId],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  /**
+   * Convenience: approve cUSD for the stake if needed, then claim the
+   * slot. Skips the approval tx when the existing allowance is already
+   * sufficient. Returns the claim tx hash.
+   *
+   * NOTE: emits up to 2 transactions. The approval tx is awaited so
+   * `claimSlot` does not race ahead of an unmined approval.
+   */
+  async claimSlotWithApproval(bountyId: bigint): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    const who = wallet.account.address;
+    const bounty = await this.getBounty(bountyId);
+    const stake = bounty.stakeRequired;
+
+    if (stake > 0n) {
+      const allowance = (await this.publicClient.readContract({
+        address: this.cUSD,
+        abi: CUSD_ABI,
+        functionName: 'allowance',
+        args: [who, this.core],
+      })) as bigint;
+      if (allowance < stake) {
+        const approveHash = await wallet.writeContract({
+          address: this.cUSD,
+          abi: CUSD_ABI,
+          functionName: 'approve',
+          args: [this.core, stake],
+          account: wallet.account,
+          chain: wallet.chain,
+        });
+        await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
+      }
+    }
+    return this.claimSlot(bountyId);
+  }
+
+  /**
+   * Submit a PR for a claimed bounty. One-shot per (bountyId, worker) —
+   * the contract rejects any subsequent submitPR even with corrected
+   * inputs, so pass the final PR URL + head commit hash.
+   */
+  async submitPR(bountyId: bigint, opts: SubmitPROptions): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'submitPR',
+      args: [bountyId, opts.prUrl, opts.commitHash, opts.metadata ?? ''],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  /**
+   * Settle a single claimer's stake on a resolved or cancelled bounty.
+   * Permissionless — anyone can call for any worker; the contract
+   * enforces the refund-vs-forfeit rules identically regardless of
+   * caller. Defaults to settling the wallet account's own stake.
+   */
+  async settleStake(bountyId: bigint, worker?: Address): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'settleStake',
+      args: [bountyId, worker ?? wallet.account.address],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  /**
+   * Pull-pattern withdrawal: transfers every cUSD credited to the wallet
+   * account (winner payouts, stake refunds, poster cancellation refunds,
+   * accrued treasury fees) to the wallet in one transaction. Always
+   * callable, even when the contract is paused.
+   */
+  async withdrawEarnings(): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'withdrawEarnings',
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
   // ─── Internal helpers ────────────────────────────────────────────────
 
   /** @internal */
@@ -202,5 +327,16 @@ export class ClaudelanceClient {
       );
     }
     return acct;
+  }
+
+  /** @internal */
+  protected requireWalletClient(): WalletClient<Transport, Chain, Account> {
+    if (!this.walletClient) {
+      throw new Error(
+        '[ClaudelanceClient] Write methods require a wallet client — use ' +
+          'fromPrivateKey() or pass a walletClient to the constructor.'
+      );
+    }
+    return this.walletClient;
   }
 }

@@ -35,7 +35,12 @@ export {
   type ClaudelanceCoreAbi,
 } from '@claudelance/types';
 
-// Client surface — read API in this barrel; PR-I/PR-J add writes + utils.
+// Client surface — read + worker-write API in this barrel.
+// PR-J adds: poster writes + util formatters.
 export { ClaudelanceClient } from './client.js';
-export type { ClaudelanceClientOptions, FromPrivateKeyOptions } from './client.js';
+export type {
+  ClaudelanceClientOptions,
+  FromPrivateKeyOptions,
+  SubmitPROptions,
+} from './client.js';
 export { celoMainnet, celoSepolia, chainForNetwork, type NetworkKey } from './chain.js';
