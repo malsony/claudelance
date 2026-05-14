@@ -1,6 +1,6 @@
-# `@claudelance/types`
+# `@yeheskieltame/claudelance-types`
 
-[![npm](https://img.shields.io/npm/v/@claudelance/types?label=npm)](https://www.npmjs.com/package/@claudelance/types)
+[![npm](https://img.shields.io/npm/v/@yeheskieltame/claudelance-types?label=npm)](https://www.npmjs.com/package/@yeheskieltame/claudelance-types)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![types only](https://img.shields.io/badge/runtime-zero%20deps-brightgreen)]()
 [![bundle](https://img.shields.io/badge/esm%20bundle-15.9%20kB-blue)]()
@@ -10,17 +10,19 @@ TypeScript types, ABI, and deployment addresses for the [Claudelance](https://gi
 ## Install
 
 ```bash
-pnpm add @claudelance/types
-# or
-npm install @claudelance/types
+# From npmjs.com (default)
+pnpm add @yeheskieltame/claudelance-types
+
+# Or from GitHub Packages (needs ~/.npmrc with a GitHub PAT, see below)
+pnpm add @yeheskieltame/claudelance-types --registry https://npm.pkg.github.com
 ```
 
 ## What's inside
 
-- `Bounty`, `Submission`, `PendingAddress` — TypeScript types mirroring the on-chain structs
-- `BountyStatus` — enum aligned with the contract's `BountyStatus`
-- `CLAUDELANCE_CORE_ABI` — typed ABI const ready to feed into viem / wagmi / ethers
-- `MAINNET`, `SEPOLIA` — deployment records with `core`, `cUSD`, `chainId`, etc.
+- `Bounty`, `Submission`, `PendingAddress`, TypeScript types mirroring the on-chain structs
+- `BountyStatus`, enum aligned with the contract's `BountyStatus`
+- `CLAUDELANCE_CORE_ABI`, typed ABI const ready to feed into viem / wagmi / ethers
+- `MAINNET`, `SEPOLIA`, deployment records with `core`, `cUSD`, `chainId`, etc.
 
 ## Quick usage
 
@@ -30,7 +32,7 @@ import {
   MAINNET,
   type Bounty,
   BountyStatus,
-} from '@claudelance/types';
+} from '@yeheskieltame/claudelance-types';
 import { createPublicClient, http } from 'viem';
 import { celo } from 'viem/chains';
 
@@ -44,7 +46,7 @@ const bounty = (await client.readContract({
 })) as Bounty;
 
 if (bounty.status === BountyStatus.Resolved) {
-  // …
+  // ...
 }
 ```
 
@@ -54,6 +56,17 @@ if (bounty.status === BountyStatus.Resolved) {
 |---------|---------|
 | Celo Mainnet (42220) | `0x775d4278Ad3f5695fbab3c3313175e9D85811AB5` |
 | Celo Sepolia (11142220) | `0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8` |
+
+## Installing from GitHub Packages
+
+GitHub Packages requires authentication even for public packages. Add to your project's `.npmrc` or `~/.npmrc`:
+
+```
+@yeheskieltame:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT
+```
+
+The PAT needs `read:packages` scope (or `write:packages` if you're also publishing).
 
 ## License
 
