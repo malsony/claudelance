@@ -23,9 +23,9 @@
 | Owner topology | Safe multisig on Celo | [Safe app](https://app.safe.global/home?safe=celo:0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0) |
 | Frontend landing | In progress, hero + live stats on `/` | `apps/web` |
 | `/post`, `/bounty/[id]`, `/stats`, `/install` | Pending | — |
-| `@claudelance/worker` npm | Planned, Day 4 | Claude Code CLI skill |
-| `@claudelance/types` npm | Published-ready (build green, awaiting `pnpm publish`) | Shared ABI + TS types |
-| `@claudelance/sdk` npm | Published-ready (build green, awaiting `pnpm publish`) | Agent client built on viem |
+| `@yeheskieltame/claudelance-worker` npm | Planned, Day 4 | Claude Code CLI skill |
+| `@yeheskieltame/claudelance-types` npm | Published-ready (build green, awaiting `pnpm publish`) | Shared ABI + TS types |
+| `@yeheskieltame/claudelance-sdk` npm | Published-ready (build green, awaiting `pnpm publish`) | Agent client built on viem |
 | Relayer (`apps/relayer`) | Planned, Day 5 | Hono + SQLite + CI verifier |
 
 Sections below describe the full intended product. Implementation status is shown inline with each section header.
@@ -76,6 +76,9 @@ All confirmed:
 | **Builder Status** | First-time Proof of Ship participant |
 | **Bounty Pricing** | Mixed tiers (Tiny $0.50-1 / Small $1-3 / Medium $3-8 / Large $8-20) |
 | **npm Strategy** | 2 packages by Day 7 + 4 packages staggered Day 9-15 |
+| **npm Naming** | `@yeheskieltame/claudelance-*` (scope matches GitHub owner for Packages registry compatibility; brand preserved in name prefix) |
+| **CLI Binaries** | Every CLI package exposes both `claudelance` and `cln` shortcut commands |
+| **npm Publishing** | Dual-publish to npmjs.com and GitHub Packages (`npm.pkg.github.com`) via the tag-driven `.github/workflows/publish-npm.yml` workflow |
 | **Phase 1 Bounty Types (UI)** | Code only |
 | **Smart Contract Bounty Types** | Allow all (0-255), future-proof |
 | **Submission Method** | Unified: GitHub PR (across all bounty types) |
@@ -227,12 +230,12 @@ claudelance/
       src/
 
   packages/                          # npm-published
-    worker/                          # @claudelance/worker (Day 4)
-    types/                           # @claudelance/types  (live, awaiting publish)
-    sdk/                             # @claudelance/sdk    (live, awaiting publish)
-    contracts/                       # @claudelance/contracts (Day 9)
+    worker/                          # @yeheskieltame/claudelance-worker (Day 4)
+    types/                           # @yeheskieltame/claudelance-types  (live, awaiting publish)
+    sdk/                             # @yeheskieltame/claudelance-sdk    (live, awaiting publish)
+    contracts/                       # @yeheskieltame/claudelance-contracts (Day 9)
     react/                           # claudelance-react (Day 13)
-    cli/                             # @claudelance/cli  (Day 15)
+    cli/                             # @yeheskieltame/claudelance-cli  (Day 15)
 ```
 
 ### Supplementary Repos: All under `github.com/yeheskieltame/`
@@ -781,10 +784,10 @@ export default config;
 
 ## 10. Worker Skill (Claude Code)
 
-> Status: planned (Day 4), not started. Will ship as `@claudelance/worker` on npm.
+> Status: planned (Day 4), not started. Will ship as `@yeheskieltame/claudelance-worker` on npm.
 
 
-### npm Package: `@claudelance/worker`
+### npm Package: `@yeheskieltame/claudelance-worker`
 
 ### SKILL.md Manifest
 
@@ -875,7 +878,7 @@ program.parse();
 
 ```bash
 # Phase 1: install via npm
-npm install -g @claudelance/worker
+npm install -g @yeheskieltame/claudelance-worker
 
 # Then in Claude Code:
 claudelance onboard
@@ -941,12 +944,12 @@ POST /webhooks/github       - GitHub webhook receiver
 
 | Day | Package | Description |
 |-----|---------|-------------|
-| **Day 4** | `@claudelance/worker` | Worker CLI + skill |
-| **Day 6** | `@claudelance/types` | TypeScript types |
-| **Day 9** | `@claudelance/contracts` | TypeChain ABIs |
-| **Day 11** | `@claudelance/sdk` | TypeScript SDK |
+| **Day 4** | `@yeheskieltame/claudelance-worker` | Worker CLI + skill |
+| **Day 6** | `@yeheskieltame/claudelance-types` | TypeScript types |
+| **Day 9** | `@yeheskieltame/claudelance-contracts` | TypeChain ABIs |
+| **Day 11** | `@yeheskieltame/claudelance-sdk` | TypeScript SDK |
 | **Day 13** | `claudelance-react` | React hooks |
-| **Day 15** | `@claudelance/cli` | Standalone CLI |
+| **Day 15** | `@yeheskieltame/claudelance-cli` | Standalone CLI |
 
 ### Auto-Publish GitHub Actions
 
@@ -976,12 +979,12 @@ jobs:
 
 | Package | Estimated Downloads |
 |---------|--------------------|
-| `@claudelance/worker` | 20-40 |
-| `@claudelance/types` | 5-15 |
-| `@claudelance/contracts` | 5-10 |
-| `@claudelance/sdk` | 10-20 |
+| `@yeheskieltame/claudelance-worker` | 20-40 |
+| `@yeheskieltame/claudelance-types` | 5-15 |
+| `@yeheskieltame/claudelance-contracts` | 5-10 |
+| `@yeheskieltame/claudelance-sdk` | 10-20 |
 | `claudelance-react` | 5-15 |
-| `@claudelance/cli` | 3-10 |
+| `@yeheskieltame/claudelance-cli` | 3-10 |
 | **Total** | **50-110** |
 
 ---
@@ -1055,7 +1058,7 @@ Critical pre-coding tasks:
 
 - [x] Use personal account `yeheskieltame` (org registration skipped)
 - [ ] Create `bounties-registry` repo under personal account (main repo already created at `github.com/yeheskieltame/claudelance`)
-- [ ] Reserve npm scope `@claudelance` (publish dummy package first)
+- [x] Use `@yeheskieltame/claudelance-*` for all npm packages (matches GitHub owner so GitHub Packages registry accepts them; brand kept in package-name prefix)
 - [ ] Create Talent Protocol Passport
 - [ ] Get human checkmark on Talent Passport
 - [ ] Connect Farcaster, GitHub, npm to Talent Passport
@@ -1071,9 +1074,9 @@ Critical pre-coding tasks:
 | **Day 0** | Smart Contracts + deploy | Hardened `ClaudelanceCore.sol` (Ownable2Step, pull pattern, timelock + validity window, O(1) pickWinner), 67 unit + 4 invariant + 28 fork tests, Slither clean, Sepolia + Mainnet deployed and verified | DONE |
 | **Day 2** | Frontend Foundation | Next.js scaffold + MiniPay hook + post bounty page | partial |
 | **Day 3** | Frontend Complete | Bounty feed + detail + winner pick + `/stats` | — |
-| **Day 4** | Worker Skill + npm #1 | Onboarding + worker loop + **publish `@claudelance/worker`** | — |
+| **Day 4** | Worker Skill + npm #1 | Onboarding + worker loop + **publish `@yeheskieltame/claudelance-worker`** | — |
 | **Day 5** | Integration + Relayer | E2E test + relayer running on Mac Mini | — |
-| **Day 6** | Production + npm #2 | Vercel deploy + **publish `@claudelance/types`** (mainnet deploy already done Day 0) | — |
+| **Day 6** | Production + npm #2 | Vercel deploy + **publish `@yeheskieltame/claudelance-types`** (mainnet deploy already done Day 0) | — |
 
 ### Phase 2: Submission Day (Day 7)
 
@@ -1093,13 +1096,13 @@ Critical pre-coding tasks:
 | Day | Focus | Output |
 |-----|-------|--------|
 | **Day 8** | Onboard first 5 workers from BCC UKDW | 5 workers active |
-| **Day 9** | Dev Web3 Jogja + npm #3 | 10+ workers, `@claudelance/contracts` published |
+| **Day 9** | Dev Web3 Jogja + npm #3 | 10+ workers, `@yeheskieltame/claudelance-contracts` published |
 | **Day 10** | Crypto-twitter push (Indonesia + English) | 15+ workers |
-| **Day 11** | Partner outreach + npm #4 | External employers, `@claudelance/sdk` |
+| **Day 11** | Partner outreach + npm #4 | External employers, `@yeheskieltame/claudelance-sdk` |
 | **Day 12** | Bug fixes + 10 new dogfooding bounties | Quality improvements |
 | **Day 13** | More bounties + npm #5 | `claudelance-react` |
 | **Day 14** | Final volume push: 20 rapid bounties | Hit volume targets |
-| **Day 15** | npm #6 + final updates | `@claudelance/cli` + demo video v2 |
+| **Day 15** | npm #6 + final updates | `@yeheskieltame/claudelance-cli` + demo video v2 |
 
 **Day 29 (May 29):** Hackathon ends. Builder Showcase soon after.
 
@@ -1205,7 +1208,7 @@ Critical pre-coding tasks:
 | Keystore compromise | Med | Med | Encryption + spending limits |
 | KarmaGAP milestone gap | Low | Med | Update twice weekly |
 | Protocol fee calculation bug | Med | Med | Dedicated test coverage |
-| npm package name taken | Low | Low | Reserve `@claudelance` Day 0 |
+| npm package name taken | None | Resolved | Use `@yeheskieltame/claudelance-*` scope (matches GitHub owner; no squat risk) |
 | GitHub rate limit | Low | Med | Cap worker activity 30 req/min |
 | Mac Mini relayer downtime | Med | Med | LaunchAgent auto-restart |
 

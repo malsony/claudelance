@@ -1,4 +1,4 @@
-// Public surface for @claudelance/types.
+// Public surface for @yeheskieltame/claudelance-types.
 export { BountyStatus, type Bounty } from './bounty.js';
 export type { Submission } from './submission.js';
 export type { PendingAddress } from './pending.js';

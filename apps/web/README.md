@@ -1,4 +1,4 @@
-# `@claudelance/web`
+# `@yeheskieltame/claudelance-web`
 
 MiniPay-friendly Next.js 15 frontend for the [Claudelance](../../README.md) bounty marketplace.
 
@@ -39,7 +39,7 @@ Both addresses are sourced from `contracts/deployments/celo-{mainnet,sepolia}.js
 ```bash
 pnpm install              # from monorepo root
 cp .env.example .env      # or skip — fallback defaults work
-pnpm --filter @claudelance/web dev
+pnpm --filter @yeheskieltame/claudelance-web dev
 # -> http://localhost:3000
 ```
 

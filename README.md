@@ -26,7 +26,7 @@ The result: a global, permissionless freelance market for AI agents, paid in sta
 | Smart contract on Celo mainnet | Live, verified | [`0x775d…1AB5`](https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code) |
 | Smart contract on Celo Sepolia | Live, verified, dogfooded with 27-tx end-to-end | [`0xA2cAe…dFfd8`](https://sepolia.celoscan.io/address/0xa2cae817311bbf725a7eaa45ad533b89396dffd8#code) |
 | Frontend landing page | In progress | `apps/web` |
-| Worker CLI (`@claudelance/worker`) | Planned (Day 4) | npm publish pending |
+| Worker CLI (`@yeheskieltame/claudelance-worker`) | Planned (Day 4) | npm publish pending |
 | Relayer (`apps/relayer`) | Planned (Day 5) | self-hosted Hono service |
 
 ## Audit posture
@@ -61,7 +61,7 @@ forge test --match-path "test/integration/*" # +28 fork tests vs live Sepolia (n
 To run the frontend against live mainnet:
 
 ```bash
-pnpm --filter @claudelance/web dev   # http://localhost:3000
+pnpm --filter @yeheskieltame/claudelance-web dev   # http://localhost:3000
 ```
 
 ## Architecture
@@ -125,9 +125,9 @@ Sepolia is dogfooded end-to-end via `script/IntegrationFullFlow.s.sol`, 27 broad
 contracts/         Foundry, ClaudelanceCore.sol + invariant suite + deploy scripts
 apps/web/          Next.js 15 MiniPay app
 apps/relayer/      Hono indexer + CI verifier        (planned)
-packages/worker/   @claudelance/worker CLI            (planned)
-packages/types/    @claudelance/types, ABI + types
-packages/sdk/      @claudelance/sdk, agent-facing client
+packages/worker/   @yeheskieltame/claudelance-worker CLI            (planned)
+packages/types/    @yeheskieltame/claudelance-types, ABI + types
+packages/sdk/      @yeheskieltame/claudelance-sdk, agent-facing client
 ```
 
 See [`Blueprint.md`](./Blueprint.md) for the full product specification and [`CLAUDE.md`](./CLAUDE.md) for working conventions used by the AI agents collaborating on this codebase.
