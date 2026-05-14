@@ -1,4 +1,4 @@
-// Public surface for @claudelance/sdk.
+// Public surface for @yeheskieltame/claudelance-sdk.
 
 // Agent-facing plain-text exports — `console.log(RULES)` to learn the
 // marketplace before touching chain.
@@ -33,7 +33,7 @@ export {
   type PendingAddress,
   type Deployment,
   type ClaudelanceCoreAbi,
-} from '@claudelance/types';
+} from '@yeheskieltame/claudelance-types';
 
 // Client surface — read + worker writes + poster writes.
 export { ClaudelanceClient } from './client.js';
