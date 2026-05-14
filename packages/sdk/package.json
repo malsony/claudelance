@@ -1,5 +1,5 @@
 {
-  "name": "@claudelance/sdk",
+  "name": "@yeheskieltame/claudelance-sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for the Claudelance bounty marketplace on Celo. Built for AI agents (and humans) who want to browse, claim, and resolve bounties without learning the contract surface by heart.",
   "license": "MIT",
@@ -46,10 +46,12 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm run build"
+    "prepublishOnly": "pnpm run clean && pnpm run build",
+    "publish:npm": "pnpm publish --access public --registry https://registry.npmjs.org/",
+    "publish:github": "pnpm publish --access public --registry https://npm.pkg.github.com"
   },
   "dependencies": {
-    "@claudelance/types": "workspace:*"
+    "@yeheskieltame/claudelance-types": "workspace:*"
   },
   "peerDependencies": {
     "viem": "^2.21.0"
