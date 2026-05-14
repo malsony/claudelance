@@ -46,6 +46,26 @@ export type SubmitPROptions = {
   metadata?: string;
 };
 
+/** Payload accepted by {@link ClaudelanceClient.postBounty}. */
+export type PostBountyOptions = {
+  /** Phase 1 UI uses 0 = Code; 0-255 is reserved for future tiers. */
+  bountyType?: number;
+  targetRepoUrl: string;
+  instructionUrl: string;
+  /** keccak256 of the off-chain JSON spec. Use `0x000…` for ad-hoc bounties. */
+  requirementsHash?: `0x${string}`;
+  /** Reward in cUSD wei. Must be >= 0.5e18. */
+  amount: bigint;
+  /** Maximum simultaneous claimers (1..MAX_SLOTS). */
+  maxSlots: number;
+  /** Anti-sybil stake in cUSD wei (0 to disable). */
+  stake: bigint;
+  /** Bounty lifetime in seconds (1 day .. 14 days). */
+  deadlineSeconds: bigint;
+  /** Require CI to pass before a winner is eligible. */
+  ciRequired: boolean;
+};
+
 /**
  * High-level read + write client for ClaudelanceCore. Wraps viem so an
  * agent only deals with marketplace concepts (bounty, claim, submit,
@@ -310,6 +330,109 @@ export class ClaudelanceClient {
       address: this.core,
       abi: CLAUDELANCE_CORE_ABI,
       functionName: 'withdrawEarnings',
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  // ─── Poster write API ────────────────────────────────────────────────
+
+  /**
+   * Post a new bounty. Transfers `amount` cUSD escrow from the wallet
+   * into the contract. Requires existing cUSD allowance; use
+   * {@link postBountyWithApproval} to auto-approve.
+   *
+   * @returns the deploy tx hash. Resolve the new bountyId by waiting
+   * for the receipt and reading the `BountyPosted` event, or by
+   * calling `getBountyCount()` after the tx confirms.
+   */
+  async postBounty(opts: PostBountyOptions): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'postBounty',
+      args: [
+        opts.bountyType ?? 0,
+        opts.targetRepoUrl,
+        opts.instructionUrl,
+        opts.requirementsHash ?? `0x${'0'.repeat(64)}`,
+        opts.amount,
+        opts.maxSlots,
+        opts.stake,
+        opts.deadlineSeconds,
+        opts.ciRequired,
+      ],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  /**
+   * Convenience: approve cUSD escrow if allowance is insufficient,
+   * then post the bounty. Approval tx is awaited so postBounty cannot
+   * race ahead of an unmined approval.
+   */
+  async postBountyWithApproval(opts: PostBountyOptions): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    const who = wallet.account.address;
+
+    const allowance = (await this.publicClient.readContract({
+      address: this.cUSD,
+      abi: CUSD_ABI,
+      functionName: 'allowance',
+      args: [who, this.core],
+    })) as bigint;
+
+    if (allowance < opts.amount) {
+      const approveHash = await wallet.writeContract({
+        address: this.cUSD,
+        abi: CUSD_ABI,
+        functionName: 'approve',
+        args: [this.core, opts.amount],
+        account: wallet.account,
+        chain: wallet.chain,
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash: approveHash });
+    }
+
+    return this.postBounty(opts);
+  }
+
+  /**
+   * Poster picks the winning submission. O(1) on chain — credits the
+   * winner's payout + treasury fee atomically; stake settlement is
+   * separate via {@link settleStake}.
+   *
+   * Reverts if the bounty is not Open, the caller is not the poster,
+   * the winner isn't a claimer, or — when ciRequired — the winner's
+   * submission lacks a passing CI attestation.
+   */
+  async pickWinner(bountyId: bigint, winner: Address): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'pickWinner',
+      args: [bountyId, winner],
+      account: wallet.account,
+      chain: wallet.chain,
+    });
+  }
+
+  /**
+   * Cancel an unresolved bounty after its deadline. During the 3-day
+   * grace window only the poster may cancel; after grace, anyone may
+   * call. Credits the poster the full bounty amount via the earnings
+   * mapping; stake settlement happens separately via {@link settleStake}.
+   */
+  async cancelExpired(bountyId: bigint): Promise<`0x${string}`> {
+    const wallet = this.requireWalletClient();
+    return wallet.writeContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'cancelExpired',
+      args: [bountyId],
       account: wallet.account,
       chain: wallet.chain,
     });

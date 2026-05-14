@@ -35,12 +35,21 @@ export {
   type ClaudelanceCoreAbi,
 } from '@claudelance/types';
 
-// Client surface — read + worker-write API in this barrel.
-// PR-J adds: poster writes + util formatters.
+// Client surface — read + worker writes + poster writes.
 export { ClaudelanceClient } from './client.js';
 export type {
   ClaudelanceClientOptions,
   FromPrivateKeyOptions,
   SubmitPROptions,
+  PostBountyOptions,
 } from './client.js';
 export { celoMainnet, celoSepolia, chainForNetwork, type NetworkKey } from './chain.js';
+
+// Utility formatters.
+export {
+  cusdToFloat,
+  floatToCusd,
+  cusdFormat,
+  timeRemaining,
+  formatBountySummary,
+} from './format.js';
