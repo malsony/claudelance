@@ -56,9 +56,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ -n "${{ inputs.package }}" ]; then
-            pnpm --filter "${{ inputs.package }}" publish --access public --no-git-checks
+            pnpm --filter "${{ inputs.package }}" publish --access public --no-git-checks --provenance
           else
-            pnpm -r --filter "./packages/*" publish --access public --no-git-checks
+            pnpm -r --filter "./packages/*" publish --access public --no-git-checks --provenance
           fi
 
       - name: Rewrite .npmrc for GitHub Packages
