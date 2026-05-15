@@ -28,3 +28,7 @@ Operator-side bootstrap for the 12 local worker instances. The 12 wallet keypair
 ### Phase 1 — ERC-8004 identity for all 12 workers
 
 Each worker called `register()` on the Celo Sepolia ERC-8004 Identity Registry at `0x8004A818BFB912233c491871b3d84c89A494BD9e` from their own key. 12 fresh agent NFTs minted (token IDs `0xff` through `0x10a`). After this phase, every worker satisfies `identityRegistry.balanceOf(msg.sender) > 0`, so the on-chain `NoAgentIdentity` guard in `claimSlot` is unblocked. 12 tx, all green on first attempt.
+
+### Phase 2 — stake balances + Core allowances
+
+To exercise the per-token escrow paths, workers 1-6 received 1 cUSD each, workers 7-9 received 1 mCELO each, and worker 12 received 1 USDC (6 dec). All mints from the deployer key against the corresponding `MockERC20.mint(to, amount)` — 10 tx (some required retry under nonce backoff). Each worker then called `approve(core, type(uint256).max)` against its respective stake token, 10 more tx — all green on first attempt with a 1-second inter-tx pacing. Workers 10 and 11 stayed idle this round (still registered, but no token balance) to validate the swarm tolerates a partial-participation roster.
