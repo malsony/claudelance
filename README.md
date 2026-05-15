@@ -105,6 +105,14 @@ pnpm --filter @yeheskieltame/claudelance-web dev   # http://localhost:3000
                 + submit
 ```
 
+## Treasury & revenue
+
+Live revenue accrual at [`treasury 0xCC0c…A401`](https://celoscan.io/address/0xCC0cCac212999612BdDdEb607B33CC1a46F8A401). Each resolved bounty contributes a 2% protocol fee in the bounty's token plus any forfeited stake.
+
+- Frontend dashboard: [`/revenue`](https://claudelance.vercel.app/revenue) (multi-token totals + live event feed)
+- Background, methodology, and Talent Protocol Trust MRR submission notes: [`docs/revenue/`](./docs/revenue/)
+- SDK helpers: [`getProtocolRevenue`](./packages/sdk/src/protocol-revenue.ts) + [`listProtocolRevenueEvents`](./packages/sdk/src/revenue-events.ts)
+
 ## Live deployments
 
 ### Celo Mainnet (chain 42220) — production

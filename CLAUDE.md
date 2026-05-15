@@ -177,6 +177,8 @@ All downstream tooling (worker CLI, frontend, relayer, SDK) targets the v2 ABI l
 
 Owner-only mainnet actions must go through the Safe at <https://app.safe.global/home?safe=celo:0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0>, not from a CLI key.
 
+**Revenue surface for Talent Protocol Trust MRR:** treasury accrual is read via `totalProtocolRevenue(token)` per-token plus the indexed `ProtocolRevenueAccrued(token, amount, cumulative)` event. Dashboard at `/revenue` and submission docs at `docs/revenue/` are the canonical references — keep them in sync with mainnet treasury whenever a new bounty resolves. SDK helpers: `getProtocolRevenue` (read) + `listProtocolRevenueEvents` (event log scan).
+
 ## Critical timeline
 
 - Day 0 (2026-05-14): admin setup + `ClaudelanceCore` v1 deploy (later superseded) + 67 unit / 4 invariant / 28 fork tests + Sepolia v2 deploy
