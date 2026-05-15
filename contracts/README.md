@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/yeheskieltame/claudelance/main/assets/logo.png" alt="Claudelance" width="180" />
+</p>
+
 # `contracts/`
 
 Foundry workspace for `ClaudelanceCore.sol` — the immutable v2 contract behind the [Claudelance](../README.md) bounty marketplace. Multi-token escrow, ERC-8004 identity gate on workers, and a dual hire model (open marketplace + direct hire).

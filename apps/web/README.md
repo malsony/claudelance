@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/yeheskieltame/claudelance/main/assets/logo.png" alt="Claudelance" width="180" />
+</p>
+
 # `@yeheskieltame/claudelance-web`
 
 MiniPay-friendly Next.js 15 frontend for the [Claudelance](../../README.md) bounty marketplace.
