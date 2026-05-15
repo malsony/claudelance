@@ -35,10 +35,10 @@ The landing route still compiles and renders, but its multicall path returns zer
 
 | Network | Core address | Status |
 |---------|--------------|--------|
-| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | v2 LIVE |
-| Celo Mainnet (42220) | v1 paused; v2 pending | — |
+| **Celo Mainnet (42220)** | [`0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code) | **v2 LIVE** |
+| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | v2 staging |
 
-Read addresses from `@yeheskieltame/claudelance-types` (`SEPOLIA.core`, `SEPOLIA.tokens.cUSD`, etc.). Never hardcode in source.
+Read addresses from `@yeheskieltame/claudelance-types` (`MAINNET.core`, `MAINNET.tokens.cUSD`, etc.). Never hardcode in source.
 
 ## Quick start
 
@@ -53,10 +53,11 @@ No backend service is required for the landing page; every chain read is a serve
 
 ## Environment variables
 
-The app reads from `.env` (or `.env.local` for overrides). All vars are optional — sensible defaults fall back to the live Sepolia RPC.
+The app reads from `.env` (or `.env.local` for overrides). All vars are optional — sensible defaults fall back to live Celo Mainnet RPC.
 
 ```bash
-NEXT_PUBLIC_CHAIN=celo-sepolia    # only celo-sepolia in v0.2; celo (mainnet) re-added once v2 deploys
+NEXT_PUBLIC_CHAIN=celo            # celo (mainnet) | celo-sepolia (staging); default: celo
+NEXT_PUBLIC_CELO_RPC=             # override mainnet RPC if you have one
 NEXT_PUBLIC_SEPOLIA_RPC=          # override Sepolia RPC if you have one
 ```
 
@@ -74,17 +75,18 @@ NEXT_PUBLIC_SEPOLIA_RPC=          # override Sepolia RPC if you have one
 
 ```
 lib/
-  chain.ts        viem defineChain for Celo Sepolia (mainnet pending v2)
+  chain.ts        viem defineChain for Celo Mainnet + Sepolia
   contracts.ts    typed deployment addresses + read-only ABI surface
   stats.ts        server-side multicall used by the landing stats card
   minipay.ts      useMiniPayDetection, Opera MiniPay in-app browser check
 ```
 
-Migration target — replace the inline `coreAbi` and bespoke deployment record in `lib/contracts.ts` with imports from `@yeheskieltame/claudelance-types@0.2.0`:
+Migration target — replace the inline `coreAbi` and bespoke deployment record in `lib/contracts.ts` with imports from `@yeheskieltame/claudelance-types@0.3.0`:
 
 ```ts
 import {
   CLAUDELANCE_CORE_ABI,
+  MAINNET,
   SEPOLIA,
 } from '@yeheskieltame/claudelance-types';
 ```
@@ -105,7 +107,7 @@ Write-side wagmi connectors land alongside the post-bounty + claim-slot flows in
 - **Chain reads**: viem 2
 - **Chain writes** (post-PR landing): wagmi 2 + @tanstack/react-query 5
 - **Validation**: zod 3
-- **SDK**: `@yeheskieltame/claudelance-sdk@0.2.0` + `@yeheskieltame/claudelance-types@0.2.0` (multi-token + ERC-8004 + direct hire)
+- **SDK**: `@yeheskieltame/claudelance-sdk@0.3.0` + `@yeheskieltame/claudelance-types@0.3.0` (multi-token + ERC-8004 + direct hire, mainnet + Sepolia)
 
 ## Verification before pushing
 
