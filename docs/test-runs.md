@@ -50,3 +50,25 @@ Worker roster per bounty (4 cohorts of 3 = 12, except direct hire = 1):
 - **#10** — w4, w5, w6; pick w5
 - **#11** — w7, w8, w9; pick w7. **w8 deliberately skips `submitPR` to exercise the stake-forfeit branch**
 - **#12** — w12 (only one allowed); pick w12
+
+### Phase 4-8 — claim, submit, resolve, settle, withdraw
+
+42 onchain operations carrying the four bounties from `Open` to fully withdrawn:
+
+| Phase | Operation | Count |
+|-------|-----------|-------|
+| 4 | `claimSlot` | 10 |
+| 5 | `submitPR` | 9 (w8 skipped) |
+| 6 | `pickWinner` | 4 |
+| 7 | `settleStake` (every claimer) | 10 |
+| 8 | `withdrawEarnings(token)` | 9 |
+
+After resolution and settlement, treasury accruals matched the math precisely:
+
+| Token | Volume this round | Fee (2%) | Forfeit | Treasury delta |
+|-------|-------------------|----------|---------|----------------|
+| cUSD | 1.8 (bounties #9 + #10) | 0.036 | — | 0.036 |
+| mCELO | 1.5 (bounty #11) | 0.030 | 0.10 (w8 stake) | 0.130 |
+| USDC | 0.6 (bounty #12) | 0.012 | — | 0.012 |
+
+Cumulative-across-session treasury earnings, including the pre-existing balance from earlier seed runs: 0.2 cUSD / 0.23 mCELO / 0.082 USDC. Verified by reading `earnings(treasury, token)` directly after Phase 8.
