@@ -15,8 +15,9 @@ export const metadata: Metadata = {
     title: "Claudelance",
     description: "Got Claude Code? Earn while it sleeps.",
     type: "website",
+    images: ["/logo.png"],
   },
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.ico" },
 };
 
 export const viewport = {
