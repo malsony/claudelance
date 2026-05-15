@@ -1,53 +1,15 @@
 {
   "chainId": 42220,
-  "chainName": "celo-mainnet",
-  "core": "0x775d4278Ad3f5695fbab3c3313175e9D85811AB5",
-  "cUSD": "0x765DE816845861e75A25fCA122bb6898B8B1282a",
-  "cUSDKind": "Mento canonical (now reports symbol 'USDm' after the 2026 rebrand; address and 18-decimal ERC20 surface unchanged)",
-  "owner": "0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0",
-  "ownerKind": "Safe (Gnosis Safe) multisig on Celo, 2 signers, threshold=1 — change to 2-of-2 via Safe UI for full multisig safety",
+  "core": "0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423",
+  "tokens": {
+    "cUSD": "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+    "CELO": "0x471EcE3750Da237f93B8E339c536989b8978a438",
+    "USDC": "0xcebA9300f2b948710d2653dD7B07f33A8B32118C"
+  },
+  "identityRegistry": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
+  "reputationRegistry": "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
   "treasury": "0xCC0cCac212999612BdDdEb607B33CC1a46F8A401",
   "ciRelayer": "0x1fEDda23c2945D59f3929e6C463cF685aC077ad5",
-  "deployer": "0x77c4a1cD22005b67Eb9CcEaE7E9577188d7Bca82",
-  "deployerKind": "Talent Protocol registered address (broadcasts attributed for Celo Proof of Ship scoring)",
-  "deployedAt": 1778736816,
-  "verification": {
-    "verifier": "Etherscan API V2",
-    "compiler": "v0.8.24+commit.e11b9ed9",
-    "optimizer": { "enabled": true, "runs": 200 },
-    "viaIR": true,
-    "status": "Pass - Verified"
-  },
-  "explorer": {
-    "core": {
-      "celoscan": "https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code",
-      "blockscout": "https://explorer.celo.org/mainnet/address/0x775d4278Ad3f5695fbab3c3313175e9D85811AB5"
-    },
-    "cUSD": {
-      "celoscan": "https://celoscan.io/address/0x765de816845861e75a25fca122bb6898b8b1282a"
-    },
-    "ownerSafe": {
-      "safeApp": "https://app.safe.global/home?safe=celo:0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0"
-    }
-  },
-  "constants": {
-    "PROTOCOL_FEE_BPS": 200,
-    "MAX_SLOTS": 20,
-    "MIN_DEADLINE": 86400,
-    "MAX_DEADLINE": 1209600,
-    "MIN_BOUNTY": "500000000000000000",
-    "RESOLUTION_GRACE_PERIOD": 259200,
-    "ADMIN_TIMELOCK": 172800,
-    "PROPOSAL_VALIDITY_WINDOW": 1209600
-  },
-  "audit": {
-    "tests": { "unit": 67, "invariant": 4, "fork": 28, "totalPassing": 99 },
-    "coverage": { "lines": "98.45%", "branches": "100%", "statements": "99.16%" },
-    "slither": "0 findings after filtering known-safe categories",
-    "gas": { "pickWinner": 136505, "settleStake": 52000 }
-  },
-  "predecessor": {
-    "core": "0x2B638dFEFa9e7538A8CeeEbe7a89CE7de4641c5C",
-    "status": "PAUSED + ABANDONED. Deployed earlier 2026-05-14 by a temporary wallet (not the user's Talent-registered address) and replaced when Celo Proof of Ship attribution rules required deployment by the registered address. The predecessor contract was paused via owner key 0x110B…4222 before abandonment; bountyCount remained 0, no cUSD was ever deposited. Do not point any tooling at it."
-  }
+  "owner": "0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0",
+  "deployedAt": 1778828074
 }
