@@ -10,29 +10,35 @@ MiniPay-friendly Next.js 15 frontend for the [Claudelance](../../README.md) boun
 
 ## What's in here
 
-- **Landing page** (`/`) — hero, four-tile live stats card (server-side multicall against the deployed core), feature grid, footer.
-- **Theming** — `next-themes` with system default; dark + light variants of the glassmorphism surface.
-- **Live chain reads** — viem `createPublicClient` reading from Celo mainnet or Sepolia depending on env.
-- **MiniPay detection hook** — `useMiniPayDetection` for the Opera MiniPay in-app browser eligibility gate.
+- **Landing page** (`/`) — hero, four-tile live stats card (server-side multicall against the deployed core), feature grid, footer
+- **Theming** — `next-themes` with system default; dark + light variants of the glassmorphism surface
+- **Live chain reads** — viem `createPublicClient` reading from the active Claudelance core
+- **MiniPay detection hook** — `useMiniPayDetection` for the Opera MiniPay in-app browser eligibility gate
 
 ## Status
 
 | Route | State | Notes |
 |-------|-------|-------|
-| `/` | live | Hero + live mainnet stats + feature grid |
-| `/post` | pending | Multi-step bounty post form |
-| `/bounty/[id]` | pending | Bounty detail + claim/submit/pick |
+| `/` | landing live; v2 wire-up pending | Hero + stats card currently bound to v1 ABI — needs port to `getStats(token)` + `@yeheskieltame/claudelance-sdk@0.2.0` |
+| `/bounties` | pending | Listing of open bounties (sortable, filter by token + status) |
+| `/bounties/[id]` | pending | Bounty detail + claim/submit/pick UI |
+| `/post` | pending | Open marketplace post-bounty form |
+| `/hire` | pending | Direct-hire form (browse worker leaderboard, pre-fill `targetWorker`) |
+| `/worker/[address]` | pending | Worker profile + earnings + reputation |
+| `/poster/[address]` | pending | Poster profile + bounties posted |
+| `/install` | pending | "Become a worker" onboarding guide (incl. ERC-8004 register step) |
 | `/stats` | pending | Richer judge-facing dashboard |
-| `/install` | pending | "Become a worker" onboarding guide |
 
-## Live deployments the UI reads from
+The landing route still compiles and renders, but its multicall path returns zero values until it's pointed at the v2 core + per-token `getStats` reads.
 
-| Network | Core address |
-|---------|--------------|
-| Celo Mainnet (42220) | [`0x775d4278Ad3f5695fbab3c3313175e9D85811AB5`](https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code) |
-| Celo Sepolia (11142220) | [`0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8`](https://sepolia.celoscan.io/address/0xa2cae817311bbf725a7eaa45ad533b89396dffd8#code) |
+## Live deployment the UI reads from
 
-Both addresses are sourced from `contracts/deployments/celo-{mainnet,sepolia}.json`. Never hardcode in source — read the JSON via `lib/contracts.ts`.
+| Network | Core address | Status |
+|---------|--------------|--------|
+| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | v2 LIVE |
+| Celo Mainnet (42220) | v1 paused; v2 pending | — |
+
+Read addresses from `@yeheskieltame/claudelance-types` (`SEPOLIA.core`, `SEPOLIA.tokens.cUSD`, etc.). Never hardcode in source.
 
 ## Quick start
 
@@ -47,11 +53,10 @@ No backend service is required for the landing page; every chain read is a serve
 
 ## Environment variables
 
-The app reads from `.env` (or `.env.local` for overrides). All vars are optional — sensible defaults fall back to mainnet RPC.
+The app reads from `.env` (or `.env.local` for overrides). All vars are optional — sensible defaults fall back to the live Sepolia RPC.
 
 ```bash
-NEXT_PUBLIC_CHAIN=celo            # celo | celo-sepolia (default: celo)
-NEXT_PUBLIC_CELO_RPC=             # override mainnet RPC if you have one
+NEXT_PUBLIC_CHAIN=celo-sepolia    # only celo-sepolia in v0.2; celo (mainnet) re-added once v2 deploys
 NEXT_PUBLIC_SEPOLIA_RPC=          # override Sepolia RPC if you have one
 ```
 
@@ -69,13 +74,22 @@ NEXT_PUBLIC_SEPOLIA_RPC=          # override Sepolia RPC if you have one
 
 ```
 lib/
-  chain.ts        viem defineChain for Celo mainnet + Sepolia
+  chain.ts        viem defineChain for Celo Sepolia (mainnet pending v2)
   contracts.ts    typed deployment addresses + read-only ABI surface
   stats.ts        server-side multicall used by the landing stats card
   minipay.ts      useMiniPayDetection, Opera MiniPay in-app browser check
 ```
 
-Write-side wagmi connectors land alongside the post-bounty form in the upcoming `/post` work.
+Migration target — replace the inline `coreAbi` and bespoke deployment record in `lib/contracts.ts` with imports from `@yeheskieltame/claudelance-types@0.2.0`:
+
+```ts
+import {
+  CLAUDELANCE_CORE_ABI,
+  SEPOLIA,
+} from '@yeheskieltame/claudelance-types';
+```
+
+Write-side wagmi connectors land alongside the post-bounty + claim-slot flows in the upcoming `/post`, `/hire`, and `/bounties/[id]` work.
 
 ## Design system
 
@@ -91,6 +105,7 @@ Write-side wagmi connectors land alongside the post-bounty form in the upcoming 
 - **Chain reads**: viem 2
 - **Chain writes** (post-PR landing): wagmi 2 + @tanstack/react-query 5
 - **Validation**: zod 3
+- **SDK**: `@yeheskieltame/claudelance-sdk@0.2.0` + `@yeheskieltame/claudelance-types@0.2.0` (multi-token + ERC-8004 + direct hire)
 
 ## Verification before pushing
 
