@@ -414,6 +414,85 @@ export class ClaudelanceClient {
     return out;
   }
 
+  /**
+   * Approve every whitelisted token in `this.tokens` (cUSD/CELO/USDC) to
+   * the Core for `type(uint256).max` if the current allowance is short.
+   * Idempotent: tokens already approved are reported with `hash: null`.
+   *
+   * Useful first-run helper so a worker only signs three approve tx once
+   * and can then `claimSlot` against any future bounty regardless of token.
+   */
+  async approveAllTokens(): Promise<Array<{ token: Address; hash: `0x${string}` | null }>> {
+    const wallet = this.requireWalletClient();
+    const owner = wallet.account.address;
+    const tokens: Address[] = [this.tokens.cUSD, this.tokens.CELO, this.tokens.USDC];
+    const max = (2n ** 256n) - 1n;
+
+    const out: Array<{ token: Address; hash: `0x${string}` | null }> = [];
+    for (const t of tokens) {
+      const allowance = (await this.publicClient.readContract({
+        address: t,
+        abi: CUSD_ABI,
+        functionName: 'allowance',
+        args: [owner, this.core],
+      })) as bigint;
+      if (allowance >= max / 2n) {
+        out.push({ token: t, hash: null });
+        continue;
+      }
+      const hash = await wallet.writeContract({
+        address: t,
+        abi: CUSD_ABI,
+        functionName: 'approve',
+        args: [this.core, max],
+        account: wallet.account,
+        chain: wallet.chain,
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash });
+      out.push({ token: t, hash });
+    }
+    return out;
+  }
+
+  /**
+   * Orchestrator: claim slot (with auto-approval) then submit the PR
+   * in one call. Skips `claimSlot` if the wallet already holds the slot.
+   * Returns both tx hashes (`claimTx` is `null` when the slot was
+   * already claimed before this call).
+   *
+   * Designed for agent runners that want a single function to call
+   * after they've finished writing code and opened a GitHub PR.
+   */
+  async solveAndSubmit(opts: {
+    bountyId: bigint;
+    prUrl: string;
+    commitHash: `0x${string}`;
+    metadata?: string;
+  }): Promise<{ claimTx: `0x${string}` | null; submitTx: `0x${string}` }> {
+    const wallet = this.requireWalletClient();
+    const me = wallet.account.address;
+
+    const alreadyClaimed = (await this.publicClient.readContract({
+      address: this.core,
+      abi: CLAUDELANCE_CORE_ABI,
+      functionName: 'hasClaimed',
+      args: [opts.bountyId, me],
+    })) as boolean;
+
+    let claimTx: `0x${string}` | null = null;
+    if (!alreadyClaimed) {
+      claimTx = await this.claimSlotWithApproval(opts.bountyId);
+      await this.publicClient.waitForTransactionReceipt({ hash: claimTx });
+    }
+
+    const submitTx = await this.submitPR(opts.bountyId, {
+      prUrl: opts.prUrl,
+      commitHash: opts.commitHash,
+      metadata: opts.metadata,
+    });
+    return { claimTx, submitTx };
+  }
+
   // ─── Poster write API ────────────────────────────────────────────────
 
   async postBounty(opts: PostBountyOptions): Promise<`0x${string}`> {

@@ -1,6 +1,6 @@
 {
   "name": "@yeheskieltame/claudelance-types",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TypeScript types, ABI, and deployment addresses for the Claudelance bounty marketplace on Celo.",
   "license": "MIT",
   "author": "yeheskieltame",
