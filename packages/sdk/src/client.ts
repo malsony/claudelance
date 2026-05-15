@@ -9,7 +9,7 @@ import {
   type Transport,
   type WalletClient,
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import {
   CLAUDELANCE_CORE_ABI,
@@ -31,6 +31,21 @@ export type FromPrivateKeyOptions = {
   network: NetworkKey;
   /** Override the default forno RPC; useful for an Alchemy/Infura key. */
   rpcUrl?: string;
+};
+
+/** Inputs accepted by {@link ClaudelanceClient.fromMnemonic}. */
+export type FromMnemonicOptions = {
+  /** BIP-39 mnemonic phrase (12 or 24 words). */
+  mnemonic: string;
+  network: NetworkKey;
+  /** Override the default forno RPC; useful for an Alchemy/Infura key. */
+  rpcUrl?: string;
+  /**
+   * BIP-44 derivation path. Defaults to `m/44'/60'/0'/0/0` — the Ethereum
+   * standard for the first account / first address, which matches what
+   * MetaMask + most desktop wallets produce.
+   */
+  derivationPath?: `m/44'/60'/${string}`;
 };
 
 /** Inputs accepted by the {@link ClaudelanceClient} constructor. */
@@ -121,6 +136,37 @@ export class ClaudelanceClient {
     const deployment: Deployment = opts.network === 'celo' ? MAINNET : SEPOLIA;
     const chain = chainForNetwork(opts.network);
     const account = privateKeyToAccount(opts.privateKey);
+    const transport = http(opts.rpcUrl);
+
+    const publicClient = createPublicClient({ chain, transport });
+    const walletClient = createWalletClient({ chain, transport, account });
+
+    return new ClaudelanceClient({
+      publicClient,
+      walletClient,
+      core: deployment.core,
+      tokens: deployment.tokens,
+      identityRegistry: deployment.identityRegistry,
+    });
+  }
+
+  /**
+   * Build a fully-wired client from a BIP-39 mnemonic + network key.
+   * Friendly onboarding path: an operator can paste their seed phrase
+   * (12 or 24 words) without ever extracting the raw private key.
+   *
+   * Default derivation `m/44'/60'/0'/0/0` (Ethereum standard, first
+   * account / first address). Override `derivationPath` to use a
+   * different index — e.g. `m/44'/60'/0'/0/1` for the second address.
+   *
+   * Supported networks: `'sepolia'` (Celo Sepolia) and `'celo'` (Celo Mainnet).
+   */
+  static fromMnemonic(opts: FromMnemonicOptions): ClaudelanceClient {
+    const deployment: Deployment = opts.network === 'celo' ? MAINNET : SEPOLIA;
+    const chain = chainForNetwork(opts.network);
+    const account = mnemonicToAccount(opts.mnemonic, {
+      path: opts.derivationPath ?? "m/44'/60'/0'/0/0",
+    });
     const transport = http(opts.rpcUrl);
 
     const publicClient = createPublicClient({ chain, transport });
