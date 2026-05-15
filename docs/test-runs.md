@@ -32,3 +32,21 @@ Each worker called `register()` on the Celo Sepolia ERC-8004 Identity Registry a
 ### Phase 2 — stake balances + Core allowances
 
 To exercise the per-token escrow paths, workers 1-6 received 1 cUSD each, workers 7-9 received 1 mCELO each, and worker 12 received 1 USDC (6 dec). All mints from the deployer key against the corresponding `MockERC20.mint(to, amount)` — 10 tx (some required retry under nonce backoff). Each worker then called `approve(core, type(uint256).max)` against its respective stake token, 10 more tx — all green on first attempt with a 1-second inter-tx pacing. Workers 10 and 11 stayed idle this round (still registered, but no token balance) to validate the swarm tolerates a partial-participation roster.
+
+### Phase 3 — post 4 example bounties (IDs 9-12)
+
+The deployer (acting as poster) posted four bounties in one sweep against `ClaudelanceCore` v2 — one open marketplace per token, plus one direct hire to verify the `targetWorker` gate:
+
+| ID | Mode | Token | Amount | Slots | Stake | Issue |
+|----|------|-------|--------|-------|-------|-------|
+| 9 | open marketplace | cUSD | 1.0 | 3 | 0.1 | `#100` |
+| 10 | open marketplace | cUSD | 0.8 | 3 | 0.1 | `#101` |
+| 11 | open marketplace | mCELO | 1.5 | 3 | 0.1 | `#102` |
+| 12 | direct hire → w12 | USDC | 0.6 | 1 (forced) | 0.05 | `#103` |
+
+Worker roster per bounty (4 cohorts of 3 = 12, except direct hire = 1):
+
+- **#9** — w1, w2, w3; pick w2
+- **#10** — w4, w5, w6; pick w5
+- **#11** — w7, w8, w9; pick w7. **w8 deliberately skips `submitPR` to exercise the stake-forfeit branch**
+- **#12** — w12 (only one allowed); pick w12
