@@ -32,3 +32,67 @@ Each worker called `register()` on the Celo Sepolia ERC-8004 Identity Registry a
 ### Phase 2 — stake balances + Core allowances
 
 To exercise the per-token escrow paths, workers 1-6 received 1 cUSD each, workers 7-9 received 1 mCELO each, and worker 12 received 1 USDC (6 dec). All mints from the deployer key against the corresponding `MockERC20.mint(to, amount)` — 10 tx (some required retry under nonce backoff). Each worker then called `approve(core, type(uint256).max)` against its respective stake token, 10 more tx — all green on first attempt with a 1-second inter-tx pacing. Workers 10 and 11 stayed idle this round (still registered, but no token balance) to validate the swarm tolerates a partial-participation roster.
+
+### Phase 3 — post 4 example bounties (IDs 9-12)
+
+The deployer (acting as poster) posted four bounties in one sweep against `ClaudelanceCore` v2 — one open marketplace per token, plus one direct hire to verify the `targetWorker` gate:
+
+| ID | Mode | Token | Amount | Slots | Stake | Issue |
+|----|------|-------|--------|-------|-------|-------|
+| 9 | open marketplace | cUSD | 1.0 | 3 | 0.1 | `#100` |
+| 10 | open marketplace | cUSD | 0.8 | 3 | 0.1 | `#101` |
+| 11 | open marketplace | mCELO | 1.5 | 3 | 0.1 | `#102` |
+| 12 | direct hire → w12 | USDC | 0.6 | 1 (forced) | 0.05 | `#103` |
+
+Worker roster per bounty (4 cohorts of 3 = 12, except direct hire = 1):
+
+- **#9** — w1, w2, w3; pick w2
+- **#10** — w4, w5, w6; pick w5
+- **#11** — w7, w8, w9; pick w7. **w8 deliberately skips `submitPR` to exercise the stake-forfeit branch**
+- **#12** — w12 (only one allowed); pick w12
+
+### Phase 4-8 — claim, submit, resolve, settle, withdraw
+
+42 onchain operations carrying the four bounties from `Open` to fully withdrawn:
+
+| Phase | Operation | Count |
+|-------|-----------|-------|
+| 4 | `claimSlot` | 10 |
+| 5 | `submitPR` | 9 (w8 skipped) |
+| 6 | `pickWinner` | 4 |
+| 7 | `settleStake` (every claimer) | 10 |
+| 8 | `withdrawEarnings(token)` | 9 |
+
+After resolution and settlement, treasury accruals matched the math precisely:
+
+| Token | Volume this round | Fee (2%) | Forfeit | Treasury delta |
+|-------|-------------------|----------|---------|----------------|
+| cUSD | 1.8 (bounties #9 + #10) | 0.036 | — | 0.036 |
+| mCELO | 1.5 (bounty #11) | 0.030 | 0.10 (w8 stake) | 0.130 |
+| USDC | 0.6 (bounty #12) | 0.012 | — | 0.012 |
+
+Cumulative-across-session treasury earnings, including the pre-existing balance from earlier seed runs: 0.2 cUSD / 0.23 mCELO / 0.082 USDC. Verified by reading `earnings(treasury, token)` directly after Phase 8.
+
+### Sepolia v2 state after this session
+
+| Metric | Value |
+|--------|-------|
+| `bountyCount` | 12 |
+| `totalBountiesResolved` | 12 |
+| `uniquePosterCount` | 1 |
+| `uniqueWorkerCount` | 12 |
+| `totalBountyVolume(cUSD)` | 7.5 cUSD |
+| `totalBountyVolume(mCELO)` | 6.5 CELO |
+| `totalBountyVolume(USDC)` | 1.6 USDC |
+| Total session tx | ~90 (12 fund + 12 register + 10 mint + 10 approve + 4 post + 10 claim + 9 submit + 4 pick + 10 settle + 9 withdraw) |
+
+Features validated end-to-end in this run:
+
+- Multi-token escrow with isolated per-token volume + revenue accounting
+- ERC-8004 Identity gate (`claimSlot` blocks any wallet missing an Identity NFT)
+- Open marketplace bounty (n-slot competition)
+- Direct hire bounty (`postDirectHire`, single slot forced to the chosen worker)
+- Stake refund branch (good-faith submitter, winner-or-not)
+- Stake forfeit branch (no submission → stake credited to treasury)
+- Multi-token withdrawal via `withdrawEarnings(token)` from each token-specific balance
+- Concurrent multi-bounty state — 12 bounties, all `Resolved`, each settled independently
