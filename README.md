@@ -251,6 +251,17 @@ Issues and PRs welcome. The codebase uses:
 
 Run `forge test` and `pnpm typecheck` before opening a PR.
 
+## Repo metadata
+
+The canonical GitHub topics, description, and homepage are applied via
+`scripts/set-repo-meta.sh`. Re-run any time the metadata drifts:
+
+```bash
+bash scripts/set-repo-meta.sh
+```
+
+Requires `gh` CLI logged in with repo admin scope. The script is idempotent — safe to run repeatedly.
+
 ## License
 
 [MIT](./LICENSE) (c) 2026 yeheskieltame
