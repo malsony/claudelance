@@ -3,9 +3,9 @@
 [![npm](https://img.shields.io/npm/v/@yeheskieltame/claudelance-types?label=npm)](https://www.npmjs.com/package/@yeheskieltame/claudelance-types)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![types only](https://img.shields.io/badge/runtime-zero%20deps-brightgreen)]()
-[![bundle](https://img.shields.io/badge/esm%20bundle-15.9%20kB-blue)]()
+[![ERC-8004](https://img.shields.io/badge/ERC--8004-ready-purple)](https://eips.ethereum.org/EIPS/eip-8004)
 
-TypeScript types, ABI, and deployment addresses for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. Zero runtime dependencies.
+TypeScript types, ABI, and deployment addresses for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. v2 covers multi-token escrow (cUSD / CELO / USDC), ERC-8004 identity-gated workers, and the dual hire model (open marketplace + direct hire). Zero runtime dependencies.
 
 > **Most users should install [`@yeheskieltame/claudelance-sdk`](../sdk) instead.** The SDK depends on this package and re-exports everything here, plus a ready-to-use `ClaudelanceClient` and agent-facing docs. Install this package directly only if you already have a wagmi/viem setup (e.g. a Next.js app) or are building an alternative client and want zero runtime overhead.
 
@@ -21,43 +21,93 @@ pnpm add @yeheskieltame/claudelance-types --registry https://npm.pkg.github.com
 
 ## What's inside
 
-- `Bounty`, `Submission`, `PendingAddress`, TypeScript types mirroring the on-chain structs
-- `BountyStatus`, enum aligned with the contract's `BountyStatus`
-- `CLAUDELANCE_CORE_ABI`, typed ABI const ready to feed into viem / wagmi / ethers
-- `MAINNET`, `SEPOLIA`, deployment records with `core`, `cUSD`, `chainId`, etc.
+- `Bounty`, `Submission`, `PendingAddress` — types mirroring the on-chain structs (v2 `Bounty` carries `token` + `targetWorker`)
+- `BountyStatus` enum aligned with the contract
+- `TokenSet` — `{ cUSD, CELO, USDC }` per `Deployment`
+- `Deployment` — `{ chainId, chainName, core, tokens, identityRegistry, reputationRegistry, owner, treasury, ciRelayer, explorerUrl }`
+- `CLAUDELANCE_CORE_ABI` — typed ABI const ready to feed into viem / wagmi / ethers
+- `SEPOLIA` — live v2 deployment record on Celo Sepolia
+- `deploymentByChainId(chainId)` — lookup helper
+- `ZERO_ADDRESS` constant + `isDirectHire(bounty)` helper
+
+Mainnet v2 deployment record is intentionally absent in 0.2.x — it returns once the v2 mainnet deploy completes (see the [root README](../../README.md#what's-live) for status).
 
 ## Quick usage
 
 ```ts
 import {
   CLAUDELANCE_CORE_ABI,
-  MAINNET,
+  SEPOLIA,
   type Bounty,
   BountyStatus,
+  isDirectHire,
 } from '@yeheskieltame/claudelance-types';
 import { createPublicClient, http } from 'viem';
-import { celo } from 'viem/chains';
+import { defineChain } from 'viem';
 
-const client = createPublicClient({ chain: celo, transport: http() });
+const celoSepolia = defineChain({
+  id: 11_142_220,
+  name: 'Celo Sepolia',
+  nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
+  rpcUrls: { default: { http: ['https://forno.celo-sepolia.celo-testnet.org/'] } },
+});
+
+const client = createPublicClient({ chain: celoSepolia, transport: http() });
 
 const bounty = (await client.readContract({
-  address: MAINNET.core,
+  address: SEPOLIA.core,
   abi: CLAUDELANCE_CORE_ABI,
   functionName: 'getBounty',
   args: [1n],
 })) as Bounty;
 
 if (bounty.status === BountyStatus.Resolved) {
-  // ...
+  console.log(isDirectHire(bounty) ? 'Direct hire bounty' : 'Open marketplace');
 }
+
+// Per-token stats
+const [volume, revenue, resolved, posters, workers] =
+  (await client.readContract({
+    address: SEPOLIA.core,
+    abi: CLAUDELANCE_CORE_ABI,
+    functionName: 'getStats',
+    args: [SEPOLIA.tokens.cUSD],
+  })) as readonly [bigint, bigint, bigint, bigint, bigint];
 ```
 
 ## Live deployments
 
-| Network | Address |
-|---------|---------|
-| Celo Mainnet (42220) | `0x775d4278Ad3f5695fbab3c3313175e9D85811AB5` |
-| Celo Sepolia (11142220) | `0xA2cAe817311BBF725a7eAa45aD533b89396dFfd8` |
+| Network | Address | Status |
+|---------|---------|--------|
+| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | **v2 LIVE** |
+| Celo Mainnet (42220) | [`0x775d4278Ad3f5695fbab3c3313175e9D85811AB5`](https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code) | v1 only (paused); v2 mainnet pending |
+
+Sepolia token whitelist (v2):
+
+| Token | Address | Decimals | minBounty |
+|-------|---------|----------|-----------|
+| cUSD (Mock) | `0xeB9595f4d14A4AEB23cc535007c973e50F1307E7` | 18 | 0.5 cUSD |
+| CELO (Mock) | `0x68128f321E01C2388628c549E3a4Ea016DB01968` | 18 | 1 CELO |
+| USDC (Mock) | `0x71f44190dCE495b663700A3e96909988b8fbF3F9` | 6 | 0.5 USDC |
+
+ERC-8004 (Celo-deployed) registries used by v2:
+
+| Registry | Sepolia | Mainnet |
+|----------|---------|---------|
+| Identity | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
+| Reputation | `0x8004B663056A597Dffe9eCcC1965A193B7388713` | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
+
+## v0.1.x → v0.2.0 migration
+
+Headline changes:
+
+- `Bounty` struct gains `token: 0x{string}` and `targetWorker: 0x{string}` (zero address = open marketplace)
+- `Deployment` shape changed: single `cUSD` field replaced by `TokenSet` (`{ cUSD, CELO, USDC }`); adds `identityRegistry`, `reputationRegistry`
+- `MAINNET` export removed for now (paused). Add it back when v2 ships to mainnet
+- `CLAUDELANCE_CORE_ABI` regenerated from the v2 Foundry artifact: signatures for `postBounty`, `postDirectHire`, `withdrawEarnings(token)`, `earnings(addr, token)`, `getStats(token)`, `allowToken`, `setMinBounty` all differ from v1
+- Constructor signature change: `(treasury, ciRelayer, owner, identityRegistry, reputationRegistry)`
+
+Bump callers from 0.1.x → 0.2.0 in one shot — the v1 ABI no longer matches any live deployment we plan to support.
 
 ## Installing from GitHub Packages
 
