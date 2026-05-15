@@ -2,7 +2,7 @@
 
 Foundry workspace for `ClaudelanceCore.sol` — the immutable v2 contract behind the [Claudelance](../README.md) bounty marketplace. Multi-token escrow, ERC-8004 identity gate on workers, and a dual hire model (open marketplace + direct hire).
 
-[![Sepolia](https://img.shields.io/badge/Celo%20Sepolia-LIVE-brightgreen)](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code)
+[![Mainnet](https://img.shields.io/badge/Celo%20Mainnet-LIVE-brightgreen)](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code)
 [![Solidity](https://img.shields.io/badge/solidity-0.8.24-363636)](https://docs.soliditylang.org)
 [![OpenZeppelin v5](https://img.shields.io/badge/OpenZeppelin-v5-4E5EE4)](https://www.openzeppelin.com/contracts)
 [![Tests](https://img.shields.io/badge/tests-83%2F83-brightgreen)](#audit-posture)
@@ -29,8 +29,8 @@ contracts/
     DeployMockCUSD.s.sol           legacy single-token mock deploy
     SeedSepoliaV2.s.sol            E2E exercise: 62 tx, 7 bounties, multi-token + 8004
   deployments/
-    celo-sepolia.json              source of truth for chain 11142220 (v2)
-    celo-mainnet.json              source of truth for chain 42220 (v1, paused)
+    celo-mainnet.json              source of truth for chain 42220 (v2 LIVE)
+    celo-sepolia.json              source of truth for chain 11142220 (v2 staging)
   .deferred/                       v1-API scripts kept for reference; rewrite for v2 pending
 ```
 
@@ -85,16 +85,18 @@ Constants:
 | `ADMIN_TIMELOCK` | 2 days |
 | `PROPOSAL_VALIDITY_WINDOW` | 14 days |
 
-`MIN_BOUNTY` is now a per-token mapping (`minBounty(token)`) set via `allowToken` / `setMinBounty`. On Sepolia: 0.5 cUSD, 1 CELO, 0.5 USDC. Stake is required `> 0` for every bounty (open + direct), no per-token floor on the stake itself.
+`MIN_BOUNTY` is now a per-token mapping (`minBounty(token)`) set via `allowToken` / `setMinBounty`. Mainnet floors: 0.5 cUSD, 1 CELO, 0.5 USDC. Stake is required `> 0` for every bounty (open + direct), no per-token floor on the stake itself.
 
 ## Live deployments
 
 | Network | Address | Status |
 |---------|---------|--------|
-| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | **v2 LIVE**, verified |
-| Celo Mainnet (42220) | [`0x775d4278Ad3f5695fbab3c3313175e9D85811AB5`](https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code) | v1, paused — v2 deferred until Sepolia validation completes |
+| **Celo Mainnet (42220)** | [`0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code) | **v2 LIVE**, verified |
+| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | v2 staging, verified |
 
 Always read addresses from `deployments/celo-{mainnet,sepolia}.json`. Never hardcode.
+
+> **Historical note:** an earlier mainnet contract at `0x775d4278Ad3f5695fbab3c3313175e9D85811AB5` (cUSD-only ABI) was deployed and verified on 2026-05-14 but never received traffic; superseded by v2 above.
 
 ## Quick start
 
@@ -145,7 +147,7 @@ forge script script/Deploy.s.sol \
 
 When the script runs with shared admin wallets on testnet, it also auto-whitelists the three configured tokens at deploy time. On mainnet, the owner Safe must call `allowToken(token, minBounty)` separately for each token.
 
-### Mainnet — chainid 42220 (v2 deferred)
+### Mainnet — chainid 42220 (v2 LIVE)
 
 ```bash
 source .env  # MAINNET_DEPLOYER_PRIVATE_KEY + MAINNET_{OWNER,TREASURY,RELAYER}_ADDRESS
