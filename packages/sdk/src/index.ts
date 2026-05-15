@@ -47,6 +47,9 @@ export type {
 } from './client.js';
 export { celoMainnet, celoSepolia, chainForNetwork, type NetworkKey } from './chain.js';
 
+// Treasury revenue helpers.
+export { getProtocolRevenue } from './protocol-revenue.js';
+
 // Utility formatters.
 export {
   tokenToFloat,
