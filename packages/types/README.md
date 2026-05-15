@@ -27,10 +27,11 @@ pnpm add @yeheskieltame/claudelance-types --registry https://npm.pkg.github.com
 - `Deployment` — `{ chainId, chainName, core, tokens, identityRegistry, reputationRegistry, owner, treasury, ciRelayer, explorerUrl }`
 - `CLAUDELANCE_CORE_ABI` — typed ABI const ready to feed into viem / wagmi / ethers
 - `SEPOLIA` — live v2 deployment record on Celo Sepolia
+- `MAINNET` — live v2 deployment record on Celo Mainnet
 - `deploymentByChainId(chainId)` — lookup helper
 - `ZERO_ADDRESS` constant + `isDirectHire(bounty)` helper
 
-Mainnet v2 deployment record is intentionally absent in 0.2.x — it returns once the v2 mainnet deploy completes (see the [root README](../../README.md#what's-live) for status).
+v2 is live on both Celo Sepolia and Celo Mainnet as of 0.3.0. The legacy v1 mainnet contract (`0x775d…11AB5`) is being paused via Safe.
 
 ## Quick usage
 
@@ -80,7 +81,7 @@ const [volume, revenue, resolved, posters, workers] =
 | Network | Address | Status |
 |---------|---------|--------|
 | Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | **v2 LIVE** |
-| Celo Mainnet (42220) | [`0x775d4278Ad3f5695fbab3c3313175e9D85811AB5`](https://celoscan.io/address/0x775d4278ad3f5695fbab3c3313175e9d85811ab5#code) | v1 only (paused); v2 mainnet pending |
+| Celo Mainnet (42220) | [`0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code) | **v2 LIVE** `0x1362d8…E423` (legacy v1 `0x775d…11AB5` paused) |
 
 Sepolia token whitelist (v2):
 
@@ -89,6 +90,14 @@ Sepolia token whitelist (v2):
 | cUSD (Mock) | `0xeB9595f4d14A4AEB23cc535007c973e50F1307E7` | 18 | 0.5 cUSD |
 | CELO (Mock) | `0x68128f321E01C2388628c549E3a4Ea016DB01968` | 18 | 1 CELO |
 | USDC (Mock) | `0x71f44190dCE495b663700A3e96909988b8fbF3F9` | 6 | 0.5 USDC |
+
+Mainnet token whitelist (v2):
+
+| Token | Address | Decimals |
+|-------|---------|----------|
+| cUSD | `0x765DE816845861e75A25fCA122bb6898B8B1282a` | 18 |
+| CELO | `0x471EcE3750Da237f93B8E339c536989b8978a438` | 18 |
+| USDC | `0xcebA9300f2b948710d2653dD7B07f33A8B32118C` | 6 |
 
 ERC-8004 (Celo-deployed) registries used by v2:
 
@@ -103,11 +112,19 @@ Headline changes:
 
 - `Bounty` struct gains `token: 0x{string}` and `targetWorker: 0x{string}` (zero address = open marketplace)
 - `Deployment` shape changed: single `cUSD` field replaced by `TokenSet` (`{ cUSD, CELO, USDC }`); adds `identityRegistry`, `reputationRegistry`
-- `MAINNET` export removed for now (paused). Add it back when v2 ships to mainnet
+- `MAINNET` export was removed in 0.2.x while v2 mainnet was pending; 0.3.0 reintroduces it pointing at `0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`
 - `CLAUDELANCE_CORE_ABI` regenerated from the v2 Foundry artifact: signatures for `postBounty`, `postDirectHire`, `withdrawEarnings(token)`, `earnings(addr, token)`, `getStats(token)`, `allowToken`, `setMinBounty` all differ from v1
 - Constructor signature change: `(treasury, ciRelayer, owner, identityRegistry, reputationRegistry)`
 
 Bump callers from 0.1.x → 0.2.0 in one shot — the v1 ABI no longer matches any live deployment we plan to support.
+
+## v0.2.x → v0.3.0 migration
+
+Non-breaking — drop-in upgrade:
+
+- `MAINNET: Deployment` constant added (chainId 42220, core `0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`)
+- `deploymentByChainId(42220)` now returns `MAINNET` instead of `undefined`
+- No type or ABI changes vs 0.2.x
 
 ## Installing from GitHub Packages
 

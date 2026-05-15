@@ -23,6 +23,7 @@ export {
 export {
   BountyStatus,
   CLAUDELANCE_CORE_ABI,
+  MAINNET,
   SEPOLIA,
   ZERO_ADDRESS,
   isDirectHire,

@@ -5,9 +5,8 @@
  * within the monorepo; this module mirrors those records for npm consumers.
  *
  * v2 introduces multi-token escrow (cUSD / CELO / USDC) and an ERC-8004
- * Identity gate on `claimSlot`. The legacy v1 mainnet contract
- * (0x775d…11AB5) is being paused; v2 mainnet deploy is deferred until the
- * Sepolia E2E loop is validated.
+ * Identity gate on `claimSlot`. v2 is live on both Celo Sepolia and Celo
+ * Mainnet; the legacy v1 mainnet contract (0x775d…11AB5) is being paused.
  */
 
 export type TokenSet = {
@@ -59,14 +58,30 @@ export const SEPOLIA: Deployment = {
   explorerUrl: 'https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code',
 };
 
+export const MAINNET: Deployment = {
+  chainId: 42220,
+  chainName: 'celo-mainnet',
+  core: '0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423',
+  tokens: {
+    cUSD: '0x765DE816845861e75A25fCA122bb6898B8B1282a',
+    CELO: '0x471EcE3750Da237f93B8E339c536989b8978a438',
+    USDC: '0xcebA9300f2b948710d2653dD7B07f33A8B32118C',
+  },
+  identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432',
+  reputationRegistry: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
+  owner: '0xe9Fc48f315fD4E989637fAcC29AaF2717E19f7F0',
+  treasury: '0xCC0cCac212999612BdDdEb607B33CC1a46F8A401',
+  ciRelayer: '0x1fEDda23c2945D59f3929e6C463cF685aC077ad5',
+  explorerUrl: 'https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code',
+};
+
 /**
  * Lookup a deployment by chain id. Returns `undefined` for unknown chains so
  * consumers can fall back gracefully (multi-chain dapps, dev workflows on
  * forks, etc.).
- *
- * Mainnet v2 is intentionally absent until Sepolia E2E is green.
  */
 export function deploymentByChainId(chainId: number): Deployment | undefined {
+  if (chainId === MAINNET.chainId) return MAINNET;
   if (chainId === SEPOLIA.chainId) return SEPOLIA;
   return undefined;
 }

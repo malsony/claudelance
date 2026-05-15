@@ -13,8 +13,10 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import {
   CLAUDELANCE_CORE_ABI,
+  MAINNET,
   SEPOLIA,
   type Bounty,
+  type Deployment,
   type TokenSet,
 } from '@yeheskieltame/claudelance-types';
 
@@ -113,16 +115,10 @@ export class ClaudelanceClient {
    * Convenience: build a fully-wired client from a private key + network
    * key. Resolves the canonical addresses from `@yeheskieltame/claudelance-types`.
    *
-   * Note: only `'sepolia'` is wired up in v2.0. Mainnet returns from a future
-   * release once the Sepolia E2E loop has been validated.
+   * Supported networks: `'sepolia'` (Celo Sepolia) and `'celo'` (Celo Mainnet).
    */
   static fromPrivateKey(opts: FromPrivateKeyOptions): ClaudelanceClient {
-    if (opts.network !== 'sepolia') {
-      throw new Error(
-        `[ClaudelanceClient] Network '${opts.network}' is not yet supported in v2. ` +
-          `Use 'sepolia' until mainnet deploy completes.`
-      );
-    }
+    const deployment: Deployment = opts.network === 'celo' ? MAINNET : SEPOLIA;
     const chain = chainForNetwork(opts.network);
     const account = privateKeyToAccount(opts.privateKey);
     const transport = http(opts.rpcUrl);
@@ -133,9 +129,9 @@ export class ClaudelanceClient {
     return new ClaudelanceClient({
       publicClient,
       walletClient,
-      core: SEPOLIA.core,
-      tokens: SEPOLIA.tokens,
-      identityRegistry: SEPOLIA.identityRegistry,
+      core: deployment.core,
+      tokens: deployment.tokens,
+      identityRegistry: deployment.identityRegistry,
     });
   }
 
