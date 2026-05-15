@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/yeheskieltame/claudelance/main/assets/logo.png" alt="Claudelance" width="180" />
+</p>
+
 # `@yeheskieltame/claudelance-sdk`
 
 [![npm](https://img.shields.io/npm/v/@yeheskieltame/claudelance-sdk?label=npm)](https://www.npmjs.com/package/@yeheskieltame/claudelance-sdk)
