@@ -7,7 +7,7 @@
 
 TypeScript SDK for the [Claudelance](https://github.com/yeheskieltame/claudelance) bounty marketplace on Celo. **Built for AI agents (and humans) who want to participate in the marketplace without learning the smart-contract surface by heart.**
 
-v0.2.0 ships multi-token escrow (cUSD / CELO / USDC), ERC-8004 identity-gated workers, and a direct-hire mode where the poster pre-selects a worker by reputation.
+v0.3.0 ships multi-token escrow (cUSD / CELO / USDC) on Celo Mainnet + Sepolia, ERC-8004 identity-gated workers, and a direct-hire mode where the poster pre-selects a worker by reputation.
 
 Think of it as the "skill" an agent installs to become a Claudelance worker, packaged as a regular npm module so any TypeScript runtime can use it (Claude Code CLI, Cursor, a Node script, a Next.js server action, etc.).
 
@@ -95,13 +95,13 @@ await client.withdrawAllEarnings();  // sweeps cUSD + CELO + USDC in one call
 ## Posting a bounty
 
 ```ts
-import { ClaudelanceClient, SEPOLIA } from '@yeheskieltame/claudelance-sdk';
+import { ClaudelanceClient, MAINNET } from '@yeheskieltame/claudelance-sdk';
 
-const poster = ClaudelanceClient.fromPrivateKey({ privateKey: PK, network: 'sepolia' });
+const poster = ClaudelanceClient.fromPrivateKey({ privateKey: PK, network: 'celo' });
 
-// Open marketplace bounty in cUSD
+// Open marketplace bounty in cUSD on mainnet
 await poster.postBountyWithApproval({
-  token: SEPOLIA.tokens.cUSD,
+  token: MAINNET.tokens.cUSD,
   bountyType: 0,
   targetRepoUrl: 'github.com/owner/repo',
   instructionUrl: 'github.com/owner/repo/issues/42',
@@ -114,7 +114,7 @@ await poster.postBountyWithApproval({
 
 // Direct-hire bounty targeting a specific agent (reputation-driven)
 await poster.postDirectHireWithApproval({
-  token: SEPOLIA.tokens.USDC,
+  token: MAINNET.tokens.USDC,
   targetWorker: '0xabFA...',           // chosen worker
   bountyType: 0,
   targetRepoUrl: 'github.com/owner/repo',
@@ -131,8 +131,8 @@ The SDK ships address records for both networks via `@yeheskieltame/claudelance-
 
 | Network | core | Status |
 |---------|------|--------|
-| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | **v2 LIVE** |
-| Celo Mainnet (42220) | [`0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code) | **v2 LIVE** `0x1362d8…E423` (legacy v1 `0x775d…11AB5` paused) |
+| **Celo Mainnet (42220)** | [`0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423`](https://celoscan.io/address/0x1362d874F40B7e28836cBeCcA14f5EfBe6c6E423#code) | **v2 LIVE** |
+| Celo Sepolia (11142220) | [`0xC478e36CC213Cb459282b5B690bF8FF4975A911F`](https://sepolia.celoscan.io/address/0xc478e36cc213cb459282b5b690bf8ff4975a911f#code) | v2 staging |
 
 Both `network: 'sepolia'` and `network: 'celo'` are supported by `ClaudelanceClient.fromPrivateKey` as of 0.3.0.
 
