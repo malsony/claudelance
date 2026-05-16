@@ -1,6 +1,8 @@
 import { defineChain } from "viem";
 import { celo } from "viem/chains";
 
+export const celoMainnet = celo;
+
 // Celo Sepolia (chain id 11142220) is not yet shipped in viem at the version
 // pinned in this workspace, so define it locally. Mirrors the canonical RPC
 // + Blockscout/Celoscan explorer pairing.
@@ -18,7 +20,7 @@ export const celoSepolia = defineChain({
   testnet: true,
 });
 
-export const supportedChains = [celoSepolia, celo] as const;
+export const supportedChains = [celoSepolia, celoMainnet] as const;
 
 export type SupportedChainId = (typeof supportedChains)[number]["id"];
 
