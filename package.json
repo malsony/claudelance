@@ -18,5 +18,8 @@
     "test": "pnpm -r run test",
     "test:contracts": "cd contracts && forge test -vvv",
     "clean": "pnpm -r run clean && rm -rf node_modules"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "^2.0.0"
   }
 }
