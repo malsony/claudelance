@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { BottomNav } from "@/components/bottom-nav";
 
 import { Providers } from "./providers";
+import InstallPromptBanner from "@/components/InstallPromptBanner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,16 @@ export const metadata: Metadata = {
     type: "website",
     images: ["/logo.png"],
   },
-  icons: { icon: "/favicon.ico" },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/logo.png",
+    other: {
+      rel: "apple-touch-icon",
+      sizes: "180x180",
+      url: "/logo.png"
+    }
+  },
+  manifest: "/manifest.webmanifest",
 };
 
 export const viewport = {
@@ -39,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <BottomNav />
         </Providers>
-      </body>
+      <InstallPromptBanner /></body>
     </html>
   );
 }
